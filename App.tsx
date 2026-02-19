@@ -5,7 +5,7 @@ import { db, saveVideo, getVideo } from './services/db';
 import VideoRecorder from './components/VideoRecorder';
 import WorkoutCalendar from './components/WorkoutCalendar';
 import InboxView from './components/InboxView';
-import { messaging, VAPID_KEY, dbFirestore } from './services/firebase';
+import { messaging, VAPID_KEY, dbFirestore, auth } from './services/firebase';
 import { getToken } from 'firebase/messaging';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { generateExerciseSuggestions } from './services/feedbackService';
@@ -48,6 +48,7 @@ import {
   Bell,
   BellOff
 } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 
 // --- Global Google Type ---
 declare global {
@@ -213,8 +214,9 @@ const AuthScreen = ({ onLogin, t, lang, setLang }: { onLogin: (u: User) => void,
             const user = await db.loginWithGoogle();
             onLogin(user);
         } catch (err: any) {
-             console.error("Login Error:", err);
-             setError(err.message || 'Google Auth failed.');
+            if (err.message === 'REDIRECT') return; // Normal redirect, not an error
+            console.error("Login Error:", err);
+            setError(err.message || 'Google Auth failed.');
         } finally {
             setLoading(false);
         }
@@ -516,6 +518,21 @@ const App = () => {
     return () => {
         if (unsubscribe) unsubscribe();
     };
+  }, []);
+
+  // --- Handle Google Redirect Result on Web ---
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      import('firebase/auth').then(({ getRedirectResult }) => {
+        getRedirectResult(auth).then(async (result) => {
+          if (result?.user) {
+            const firebaseUser = result.user;
+            const u = await db.getOrCreateUserFromFirebase(firebaseUser);
+            if (u) setUser(u);
+          }
+        }).catch(console.error);
+      });
+    }
   }, []);
 
   // --- Real-time Data & Notifications ---

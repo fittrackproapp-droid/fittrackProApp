@@ -1,4 +1,3 @@
-
 import { User, UserRole, Exercise, WorkoutPlan, Submission, Message } from '../types';
 import { auth, dbFirestore, isFirebaseConfigured, googleProvider, storage } from './firebase';
 import { 
@@ -431,7 +430,7 @@ export const db = {
             } else {
                 // Trigger redirect — page will reload and return here
                 await signInWithRedirect(auth, googleProvider);
-                return; // Function exits here, redirect takes over
+                throw new Error('REDIRECT'); // Redirect is happening, page will reloa
             }
         }
 
@@ -656,5 +655,22 @@ export const db = {
 
   performCleanup: async () => {
       if (isFirebaseConfigured) await db.cleanupOldVideos();
-  }
+  },
+
+  getOrCreateUserFromFirebase: async (firebaseUser: any): Promise<User> => {
+    const docRef = doc(dbFirestore, "users", firebaseUser.uid);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+        return docSnap.data() as User;
+    }
+    const newUser: User = {
+        id: firebaseUser.uid,
+        email: firebaseUser.email || "",
+        name: firebaseUser.displayName || "Google User",
+        role: UserRole.TRAINEE,
+        points: 0
+    };
+    await setDoc(docRef, newUser);
+    return newUser;
+},
 };
