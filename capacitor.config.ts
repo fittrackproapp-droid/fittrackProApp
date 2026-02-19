@@ -23,6 +23,11 @@ const config: CapacitorConfig = {
       backgroundColor: '#6366f1', // Indigo — match your app theme
       showSpinner: false,
     },
+    GoogleAuth: {
+      scopes: ['profile', 'email'],
+      serverClientId: '888756758530-g5ka688msmf2qdkp2cqchsf5v0t49bsu.apps.googleusercontent.com',
+      forceCodeForRefreshToken: true,
+    },
   },
 };
 

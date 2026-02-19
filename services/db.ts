@@ -20,8 +20,11 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
   onAuthStateChanged,
-  signOut
+  signOut,
+  signInWithCredential,
+  GoogleAuthProvider,
 } from 'firebase/auth';
+import { Capacitor } from '@capacitor/core';
 import { 
   ref, 
   uploadBytesResumable, 
@@ -408,31 +411,44 @@ export const db = {
   },
 
   loginWithGoogle: async (): Promise<User> => {
-      if (!isFirebaseConfigured) throw new Error("Firebase not configured");
+    if (!isFirebaseConfigured) throw new Error("Firebase not configured");
 
-      try {
-          const result = await signInWithPopup(auth, googleProvider);
-          const firebaseUser = result.user;
-          const docRef = doc(dbFirestore, "users", firebaseUser.uid);
-          const docSnap = await getDoc(docRef);
+    try {
+        let firebaseUser;
 
-          if (docSnap.exists()) {
-              return docSnap.data() as User;
-          } else {
-              const newUser: User = {
-                  id: firebaseUser.uid,
-                  email: firebaseUser.email || "",
-                  name: firebaseUser.displayName || "Google User",
-                  role: UserRole.TRAINEE,
-                  points: 0
-              };
-              await setDoc(docRef, newUser);
-              return newUser;
-          }
-      } catch (e) {
-          throw handleFirebaseError(e, 'loginWithGoogle');
-      }
-  },
+        if (Capacitor.isNativePlatform()) {
+            // Native Android — use Capacitor Google Auth plugin
+            const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
+            const googleUser = await GoogleAuth.signIn();
+            const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
+            const result = await signInWithCredential(auth, credential);
+            firebaseUser = result.user;
+        } else {
+            // Web browser — use popup
+            const result = await signInWithPopup(auth, googleProvider);
+            firebaseUser = result.user;
+        }
+
+        const docRef = doc(dbFirestore, "users", firebaseUser.uid);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+            return docSnap.data() as User;
+        } else {
+            const newUser: User = {
+                id: firebaseUser.uid,
+                email: firebaseUser.email || "",
+                name: firebaseUser.displayName || "Google User",
+                role: UserRole.TRAINEE,
+                points: 0
+            };
+            await setDoc(docRef, newUser);
+            return newUser;
+        }
+    } catch (e) {
+        throw handleFirebaseError(e, 'loginWithGoogle');
+    }
+},
 
   updateUser: async (updatedUser: User) => {
       if (!isFirebaseConfigured) throw new Error("Firebase not configured");
