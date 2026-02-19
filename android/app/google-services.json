@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "888756758530-88pdm7d6fvnof3h004mbdkpfjinivh9s.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.fittrackpro.app",
+            "certificate_hash": "e1f07fab499faf831250a23b244211cbf3e63879"
+          }
+        },
+        {
           "client_id": "888756758530-g5ka688msmf2qdkp2cqchsf5v0t49bsu.apps.googleusercontent.com",
           "client_type": 3
         }
