@@ -18,7 +18,8 @@ import {
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   onAuthStateChanged,
   signOut,
   signInWithCredential,
@@ -417,16 +418,21 @@ export const db = {
         let firebaseUser;
 
         if (Capacitor.isNativePlatform()) {
-            // Native Android — use Capacitor Google Auth plugin
             const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
             const googleUser = await GoogleAuth.signIn();
             const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
             const result = await signInWithCredential(auth, credential);
             firebaseUser = result.user;
         } else {
-            // Web browser — use popup
-            const result = await signInWithPopup(auth, googleProvider);
-            firebaseUser = result.user;
+            // Check if returning from redirect first
+            const redirectResult = await getRedirectResult(auth);
+            if (redirectResult) {
+                firebaseUser = redirectResult.user;
+            } else {
+                // Trigger redirect — page will reload and return here
+                await signInWithRedirect(auth, googleProvider);
+                return; // Function exits here, redirect takes over
+            }
         }
 
         const docRef = doc(dbFirestore, "users", firebaseUser.uid);
@@ -448,7 +454,7 @@ export const db = {
     } catch (e) {
         throw handleFirebaseError(e, 'loginWithGoogle');
     }
-},
+  },
 
   updateUser: async (updatedUser: User) => {
       if (!isFirebaseConfigured) throw new Error("Firebase not configured");
