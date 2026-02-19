@@ -71,7 +71,7 @@ const playNotificationSound = () => {
 }
 
 const sendLocalNotification = (title: string, body: string) => {
-    if (Notification.permission === 'granted') {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
         playNotificationSound();
         
         // Use ServiceWorker registration to show notification (Required for Android PWA)
@@ -466,10 +466,15 @@ const App = () => {
   const [deleteUserConfirm, setDeleteUserConfirm] = useState<string | null>(null);
 
   // Notification Permission State
-  const [notifPermission, setNotifPermission] = useState(Notification.permission);
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>(
+    typeof Notification !== 'undefined' ? Notification.permission : 'denied',
+  );
 
   const requestPermission = async () => {
-    const res = await Notification.requestPermission();
+    let res: NotificationPermission = 'denied';
+    if (typeof Notification !== 'undefined') {
+      res = await Notification.requestPermission();
+    }
     setNotifPermission(res);
     if (res === 'granted' && user) {
         const swReg = await navigator.serviceWorker.ready;
