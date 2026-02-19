@@ -418,6 +418,12 @@ export const db = {
 
         if (Capacitor.isNativePlatform()) {
             const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
+            // Must initialize before signing in
+            await GoogleAuth.initialize({
+                clientId: '888756758530-g5ka688msmf2qdkp2cqchsf5v0t49bsu.apps.googleusercontent.com',
+                scopes: ['profile', 'email'],
+                grantOfflineAccess: true,
+            });
             const googleUser = await GoogleAuth.signIn();
             const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
             const result = await signInWithCredential(auth, credential);
