@@ -1,0 +1,8 @@
+{
+  "name": "Copy of FitTrack Pro",
+  "description": "A comprehensive fitness tracking application connecting coaches and trainees with video feedback and workout planning.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
