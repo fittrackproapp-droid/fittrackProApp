@@ -1,14 +1,10 @@
 const webpush = require('web-push');
 const admin = require('firebase-admin');
 
-// Initialize Firebase Admin once
 if (!admin.apps.length) {
+  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
   admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    }),
+    credential: admin.credential.cert(serviceAccount),
   });
 }
 
@@ -27,21 +23,13 @@ exports.handler = async (event) => {
     const { subscription, nativeFcmToken, title, body } = JSON.parse(event.body);
 
     if (nativeFcmToken) {
-      // Native Android — use FCM
       await admin.messaging().send({
         token: nativeFcmToken,
         notification: { title, body },
-        android: {
-          priority: 'high',
-          notification: { sound: 'default' }
-        }
+        android: { priority: 'high', notification: { sound: 'default' } }
       });
     } else if (subscription) {
-      // Web browser — use web-push
-      await webpush.sendNotification(
-        subscription,
-        JSON.stringify({ title, body })
-      );
+      await webpush.sendNotification(subscription, JSON.stringify({ title, body }));
     }
 
     return { statusCode: 200, body: JSON.stringify({ success: true }) };
