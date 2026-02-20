@@ -20,6 +20,7 @@
     "@codetrix-studio/capacitor-google-auth": "^3.4.0-rc.4",
     "@google/genai": "*",
     "firebase": "^10.8.0",
+    "firebase-admin": "^13.6.1",
     "lucide-react": "^0.344.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

@@ -494,17 +494,23 @@ const App = () => {
 
   const sendPushToUser = async (targetUserId: string, title: string, body: string) => {
     try {
-        const subDoc = await getDoc(doc(dbFirestore, 'pushSubscriptions', targetUserId));
-        if (!subDoc.exists()) return;
-        
-        const { subscription } = subDoc.data();
-        await fetch('/.netlify/functions/send-push', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ subscription, title, body })
-        });
+      const subDoc = await getDoc(doc(dbFirestore, 'pushSubscriptions', targetUserId));
+      if (!subDoc.exists()) return;
+      
+      const data = subDoc.data();
+      
+      await fetch('/.netlify/functions/send-push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subscription: data.subscription || null,
+          nativeFcmToken: data.nativeFcmToken || null,
+          title,
+          body
+        })
+      });
     } catch (err) {
-        console.error('Failed to send push:', err);
+      console.error('Failed to send push:', err);
     }
   };
   // --- Auth Persistence Logic ---
