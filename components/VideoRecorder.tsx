@@ -44,25 +44,38 @@ const VideoRecorder: React.FC<VideoRecorderProps> = ({ onSave, onCancel, labels 
 
     const startCamera = async () => {
         try {
-            // On native Android, ask Capacitor for camera + mic permissions first,
-            // then fall through to getUserMedia which works fine in Capacitor's WebView.
             if (Capacitor.isNativePlatform()) {
-                // @capacitor/camera only manages 'camera' and 'photos' permissions.
-                // Microphone permission is requested automatically by getUserMedia below.
-                const perms = await CapCamera.requestPermissions({ permissions: ['camera'] });
-                if (perms.camera === 'denied') {
+                // Request camera permission
+                const camPerms = await CapCamera.requestPermissions({ permissions: ['camera'] });
+                if (camPerms.camera === 'denied') {
                     setError(labels.error);
                     return;
                 }
+    
+                // Request microphone permission separately via getUserMedia probe
+                // This triggers the Android runtime mic permission dialog
+                try {
+                    const micTest = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                    micTest.getTracks().forEach(t => t.stop());
+                } catch {
+                    // Mic might already be granted or will be prompted by the main call below
+                }
             }
-
+    
             const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
             setStream(s);
             if (videoRef.current) {
                 videoRef.current.srcObject = s;
             }
-        } catch {
-            setError(labels.error);
+        } catch (err: unknown) {
+            const domErr = err as DOMException;
+            if (domErr?.name === 'NotAllowedError' || domErr?.name === 'PermissionDeniedError') {
+                setError(`${labels.error} — Please enable Camera & Microphone in your device Settings.`);
+            } else if (domErr?.name === 'NotFoundError') {
+                setError(`${labels.error} — No camera found on this device.`);
+            } else {
+                setError(labels.error);
+            }
         }
     };
 
@@ -125,10 +138,6 @@ const VideoRecorder: React.FC<VideoRecorderProps> = ({ onSave, onCancel, labels 
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    if (error) {
-        return <div className="p-4 text-red-500 bg-red-100 rounded">{error}</div>;
-    }
-
     return (
         <div className="flex flex-col items-center bg-slate-200 rounded-2xl overflow-hidden relative shadow-lg border border-slate-300">
             <video
@@ -189,6 +198,20 @@ const VideoRecorder: React.FC<VideoRecorderProps> = ({ onSave, onCancel, labels 
             >
                 {labels.cancel}
             </button>
+
+            {error && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/80 gap-4 p-6 text-center">
+                    <Camera className="text-slate-400 w-12 h-12" />
+                    <p className="text-white font-semibold">{error}</p>
+                    <button
+                        onClick={() => { setError(''); startCamera(); }}
+                        className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-500 transition"
+                    >
+                        Try Again
+                    </button>
+                    <button onClick={onCancel} className="text-slate-400 text-xs underline">Cancel</button>
+                </div>
+            )}
         </div>
     );
 };

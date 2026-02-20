@@ -950,19 +950,20 @@ const App = () => {
         {/* ... Header remains largely unchanged ... */}
         <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
             <div className="max-w-5xl mx-auto px-4 h-16 flex justify-between items-center">
-                <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition" onClick={handleHomeView}>
-                     <div className="bg-indigo-600 p-1.5 rounded-lg"><Dumbbell className="text-white w-5 h-5" /></div>
-                     <div><h1 className="text-lg font-bold leading-tight">{t('app_name')}</h1><span className="text-[10px] text-gray-500 font-medium tracking-wider uppercase">{user.role === UserRole.ADMIN ? t('role_admin') : user.role === UserRole.COACH ? t('role_coach') : t('role_trainee')}</span></div>
-                </div>
+            <div className="flex items-center gap-2.5 cursor-pointer hover:opacity-80 transition" onClick={handleHomeView}>
+                <img 
+                    src="https://cdn-icons-png.flaticon.com/512/2964/2964514.png"
+                    alt="FitTrack Pro"
+                    className="w-12 h-12 rounded-xl object-cover"
+                />
+            <div className="flex flex-col justify-center leading-none">
+                <h1 className="text-base font-bold text-slate-900 leading-tight">{t('app_name')}</h1>
+                <span className="text-[10px] text-gray-400 font-medium tracking-widest uppercase mt-0.5">
+                    {user.role === UserRole.ADMIN ? t('role_admin') : user.role === UserRole.COACH ? t('role_coach') : t('role_trainee')}
+                </span>
+            </div>
+        </div>
                 <div className="flex items-center gap-3">
-                     <button 
-                        onClick={requestPermission} 
-                        className={`p-2 rounded-full hover:bg-gray-100 relative ${notifPermission === 'granted' ? 'text-gray-400' : 'text-indigo-600 bg-indigo-50 animate-pulse'}`} 
-                        title="Enable Notifications"
-                     >
-                         {notifPermission === 'granted' ? <BellOff size={18}/> : <Bell size={18}/>}
-                     </button>
-                     <button onClick={() => setLang(lang === 'en' ? 'he' : 'en')} className="p-1.5 rounded hover:bg-gray-100 text-indigo-600"><Globe size={18} /></button>
                      <button onClick={() => setView('LEADERBOARD')} className={`p-2 rounded hover:bg-gray-100 text-gray-600 ${view === 'LEADERBOARD' ? 'text-indigo-600 bg-indigo-50' : ''}`} title={t('leaderboard')}><Trophy size={20} /></button>
                     <button onClick={handleHomeView} className={`p-2 rounded hover:bg-gray-100 text-gray-600 ${ (user.role === UserRole.ADMIN && view === 'ADMIN') || (user.role !== UserRole.ADMIN && view === 'DASHBOARD') ? 'text-indigo-600 bg-indigo-50' : ''}`} title={t('home')}><Home size={20} /></button>
                     {(user.role === UserRole.TRAINEE || user.role === UserRole.COACH) && (
@@ -1210,6 +1211,16 @@ const App = () => {
                 </div>
             )}
         </main>
+        {/* Bottom Language Switcher Bar */}
+        <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-sm border-t border-gray-100 z-20 flex justify-center py-2 px-4">
+            <button
+                onClick={() => setLang(lang === 'en' ? 'he' : 'en')}
+                className="flex items-center gap-2 px-4 py-1.5 rounded-full hover:bg-gray-100 text-indigo-600 text-sm font-semibold transition"
+            >
+                <Globe size={15} />
+                {lang === 'en' ? 'עברית' : 'English'}
+            </button>
+        </div>
     </div>
   );
 }
