@@ -530,18 +530,19 @@ const App = () => {
     };
   }, []);
 
-  // --- Handle Google Redirect Result on Web ---
+  // Web only — catches the redirect result after Google sends the user back to Netlify
+  // Native Android uses Capacitor Google Auth plugin (no redirect needed)
   useEffect(() => {
-    if (Capacitor.isNativePlatform()) {
-      import('firebase/auth').then(({ getRedirectResult }) => {
-        getRedirectResult(auth).then(async (result) => {
-          if (result?.user) {
-            const firebaseUser = result.user;
-            const u = await db.getOrCreateUserFromFirebase(firebaseUser);
-            if (u) setUser(u);
-          }
-        }).catch(console.error);
-      });
+    if (!Capacitor.isNativePlatform()) {
+        import('firebase/auth').then(({ getRedirectResult }) => {
+            getRedirectResult(auth).then(async (result) => {
+                if (result?.user) {
+                    const firebaseUser = result.user;
+                    const u = await db.getOrCreateUserFromFirebase(firebaseUser);
+                    if (u) setUser(u);
+                }
+            }).catch(console.error);
+        });
     }
   }, []);
 
