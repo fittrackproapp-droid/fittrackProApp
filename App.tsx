@@ -467,6 +467,10 @@ const App = () => {
   // User delete confirmation
   const [deleteUserConfirm, setDeleteUserConfirm] = useState<string | null>(null);
 
+  // Uploaded/recorded video delete confirmation
+  const [removeMediaConfirm, setRemoveMediaConfirm] = useState<string | null>(null);
+
+
   // Notification Permission State
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>(
     typeof Notification !== 'undefined' ? Notification.permission : 'denied',
@@ -730,7 +734,7 @@ const App = () => {
   const toggleFeedback = (subId: string) => { if (expandedFeedback.includes(subId)) { setExpandedFeedback(prev => prev.filter(id => id !== subId)); } else { setExpandedFeedback(prev => [...prev, subId]); } }
   const handleAddRecordedVideo = (blob: Blob) => { const preview = URL.createObjectURL(blob); setSessionMedia([...sessionMedia, { id: crypto.randomUUID(), file: blob, type: 'video', preview, name: `Recorded Video ${sessionMedia.length + 1}`, isExisting: false }]); setView('SESSION_HUB'); }
   const handleUploadVideo = (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files && e.target.files[0]) { const file = e.target.files[0]; const preview = URL.createObjectURL(file); setSessionMedia([...sessionMedia, { id: crypto.randomUUID(), file: file, type: 'video', preview, name: file.name, isExisting: false }]); } }
-  const handleRemoveMedia = (id: string) => { setSessionMedia(sessionMedia.filter(m => m.id !== id)); }
+  const handleRemoveMedia = (id: string) => { setRemoveMediaConfirm(id); }
   
   const handleFinishWorkout = async () => { 
     if (!user) return; 
@@ -1039,6 +1043,35 @@ const App = () => {
             </div>
         )}
 
+        {removeMediaConfirm && (
+            <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 p-6 w-full max-w-sm text-center">
+                    <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Trash2 className="text-red-500" size={22} />
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900 mb-1">{t('delete_video_title')}</h3>
+                    <p className="text-sm text-gray-500 mb-6">{t('delete_video_warning')}</p>
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => setRemoveMediaConfirm(null)}
+                            className="flex-1 px-4 py-2 rounded-xl border border-gray-200 text-gray-700 font-bold hover:bg-gray-50 transition"
+                        >
+                            {t('cancel')}
+                        </button>
+                        <button
+                            onClick={() => {
+                                setSessionMedia(prev => prev.filter(m => m.id !== removeMediaConfirm));
+                                setRemoveMediaConfirm(null);
+                            }}
+                            className="flex-1 px-4 py-2 rounded-xl bg-red-500 text-white font-bold hover:bg-red-600 transition shadow-md"
+                        >
+                            {t('delete_action')}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
         {loadingData && (
              <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
                  <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center space-y-6 animate-in fade-in zoom-in duration-300">
@@ -1194,7 +1227,23 @@ const App = () => {
                     <div className="bg-white p-4 rounded-xl border border-gray-200"><h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">{t('selected_for_session')}</h3><div className="flex flex-wrap gap-2">{exercises.filter(e => recordingExercises.includes(e.id)).map(e => (<span key={e.id} className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-sm font-medium border border-indigo-100 flex items-center gap-2">{getCategoryIcon(e.category)}{t(e.name)}</span>))}</div></div>
                     <div className="bg-white p-4 rounded-xl border border-gray-200 space-y-4">
                         <div className="flex justify-between items-center"><h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide">{t('session_media')}</h3><Badge color="bg-indigo-100 text-indigo-700">{sessionMedia.length} {t('videos_count')}</Badge></div>
-                        {sessionMedia.length === 0 ? (<div className="text-center py-8 border-2 border-dashed border-gray-100 rounded-xl bg-gray-50"><Film className="mx-auto text-gray-300 mb-2" size={32} /><p className="text-sm text-gray-400">{t('no_media_yet')}</p></div>) : (<div className="grid grid-cols-2 gap-3">{sessionMedia.map(media => (<div key={media.id} className="relative group rounded-lg overflow-hidden border border-gray-200 bg-gray-50"><video src={media.preview} className="w-full h-32 object-cover" /><div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2"><button onClick={() => setPlaybackUrl(media.preview)} className="p-2 bg-white/20 hover:bg-white/40 rounded-full text-white backdrop-blur-sm"><Play size={20}/></button><button onClick={() => handleRemoveMedia(media.id)} className="p-2 bg-red-500/80 hover:bg-red-600 rounded-full text-white backdrop-blur-sm"><Trash2 size={20}/></button></div><div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 text-white text-xs truncate">{media.name}{media.isExisting && <span className="block text-[9px] text-gray-300 italic">(Existing)</span>}</div></div>))}</div>)}
+                        {sessionMedia.length === 0 ? (<div className="text-center py-8 border-2 border-dashed border-gray-100 rounded-xl bg-gray-50"><Film className="mx-auto text-gray-300 mb-2" size={32} /><p className="text-sm text-gray-400">{t('no_media_yet')}</p></div>) : (
+                            <div className="grid grid-cols-2 gap-3">{sessionMedia.map(media => (
+                                <div key={media.id} className="rounded-lg overflow-hidden border border-gray-200 bg-gray-50 flex flex-col">
+                                    <video src={media.preview} className="w-full h-32 object-cover" />
+                                    <div className="px-2 py-1.5 flex items-center justify-between bg-white border-t border-gray-100">
+                                        <span className="text-xs text-gray-500 truncate flex-1 mr-2">
+                                            {media.name}
+                                            {media.isExisting && <span className="block text-[9px] text-gray-400 italic">Existing</span>}
+                                        </span>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            <button onClick={() => setPlaybackUrl(media.preview)} className="p-1.5 bg-indigo-50 hover:bg-indigo-100 rounded-lg text-indigo-600 transition"><Play size={16}/></button>
+                                            <button onClick={() => handleRemoveMedia(media.id)} className="p-1.5 bg-red-50 hover:bg-red-100 rounded-lg text-red-500 transition"><Trash2 size={16}/></button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}</div>
+                        )}
                         <div className="grid grid-cols-2 gap-4 pt-2"><Button variant="secondary" onClick={() => setView('RECORD')} className="h-12 border-dashed border-2"><Camera size={20} className="text-indigo-600" /> {t('record_video')}</Button><Button variant="secondary" onClick={() => fileInputRef.current?.click()} className="h-12 border-dashed border-2"><Upload size={20} className="text-indigo-600" /> {t('upload_video')}</Button><input type="file" ref={fileInputRef} className="hidden" accept="video/*" onChange={handleUploadVideo} /></div>
                     </div>
                     <div className="bg-white p-4 rounded-xl border border-gray-200"><textarea className="w-full text-sm p-3 border rounded-lg focus:ring-2 focus:ring-indigo-100 outline-none resize-none h-24" placeholder={t('add_notes')} value={traineeNote} onChange={(e) => setTraineeNote(e.target.value)} /></div>

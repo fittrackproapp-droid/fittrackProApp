@@ -1,7 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Camera, StopCircle, RotateCcw, Save } from 'lucide-react';
-import { Capacitor } from '@capacitor/core';
-import { Camera as CapCamera } from '@capacitor/camera';
+import { Camera, StopCircle, RotateCcw, Save, SwitchCamera } from 'lucide-react';
 
 interface VideoRecorderProps {
     onSave: (blob: Blob) => void;
@@ -20,16 +18,18 @@ const VideoRecorder: React.FC<VideoRecorderProps> = ({ onSave, onCancel, labels 
     const videoRef = useRef<HTMLVideoElement>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const chunksRef = useRef<Blob[]>([]);
+    const streamRef = useRef<MediaStream | null>(null); // always up-to-date, no stale closure issue
 
     const [isRecording, setIsRecording] = useState(false);
     const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
     const [error, setError] = useState<string>('');
-    const [stream, setStream] = useState<MediaStream | null>(null);
     const [timer, setTimer] = useState(0);
+    const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
+    const [isFlipping, setIsFlipping] = useState(false);
 
     useEffect(() => {
-        startCamera();
-        return () => { stopCamera(); };
+        startCamera('environment');
+        return () => { stopCurrentStream(); };
     }, []);
 
     useEffect(() => {
@@ -42,58 +42,53 @@ const VideoRecorder: React.FC<VideoRecorderProps> = ({ onSave, onCancel, labels 
         return () => clearInterval(interval);
     }, [isRecording]);
 
-    const startCamera = async () => {
+    const stopCurrentStream = () => {
+        // Always reads from ref — never stale
+        streamRef.current?.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+    };
+
+    const startCamera = async (facing: 'environment' | 'user') => {
+        setError('');
         try {
-            if (Capacitor.isNativePlatform()) {
-                // Request camera permission
-                const camPerms = await CapCamera.requestPermissions({ permissions: ['camera'] });
-                if (camPerms.camera === 'denied') {
-                    setError(labels.error);
-                    return;
-                }
-    
-                // Request microphone permission separately via getUserMedia probe
-                // This triggers the Android runtime mic permission dialog
-                try {
-                    const micTest = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-                    micTest.getTracks().forEach(t => t.stop());
-                } catch {
-                    // Mic might already be granted or will be prompted by the main call below
-                }
-            }
-    
-            const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            setStream(s);
+            // Stop existing stream first via ref (always current)
+            stopCurrentStream();
+
+            // Give Android a moment to fully release the camera hardware
+            await new Promise(res => setTimeout(res, 300));
+
+            const s = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: facing } },
+                audio: true,
+            });
+
+            streamRef.current = s; // update ref immediately
+            setFacingMode(facing);
+
             if (videoRef.current) {
                 videoRef.current.srcObject = s;
+                videoRef.current.src = '';
+                videoRef.current.controls = false;
             }
-        } catch (err: unknown) {
-            const domErr = err as DOMException;
-            if (domErr?.name === 'NotAllowedError' || domErr?.name === 'PermissionDeniedError') {
-                setError(`${labels.error} — Please enable Camera & Microphone in your device Settings.`);
-            } else if (domErr?.name === 'NotFoundError') {
-                setError(`${labels.error} — No camera found on this device.`);
-            } else {
-                setError(labels.error);
-            }
+        } catch (err) {
+            console.error('Camera error:', err);
+            setError(labels.error);
         }
     };
 
-    const stopCamera = () => {
-        stream?.getTracks().forEach(track => track.stop());
-        setStream(null);
+    const handleFlipCamera = async () => {
+        if (isRecording || isFlipping) return;
+        setIsFlipping(true);
+        const next = facingMode === 'environment' ? 'user' : 'environment';
+        await startCamera(next);
+        setIsFlipping(false);
     };
 
     const handleStartRecording = () => {
-        if (!stream) return;
+        if (!streamRef.current) return;
         chunksRef.current = [];
-
-        // video/mp4 is preferred on Android; fall back to webm for desktop browsers
-        const mimeType = MediaRecorder.isTypeSupported('video/mp4')
-            ? 'video/mp4'
-            : 'video/webm';
-
-        const recorder = new MediaRecorder(stream, { mimeType });
+        const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
+        const recorder = new MediaRecorder(streamRef.current, { mimeType });
 
         recorder.ondataavailable = (e) => {
             if (e.data.size > 0) chunksRef.current.push(e.data);
@@ -128,7 +123,7 @@ const VideoRecorder: React.FC<VideoRecorderProps> = ({ onSave, onCancel, labels 
         if (videoRef.current) {
             videoRef.current.src = '';
             videoRef.current.controls = false;
-            videoRef.current.srcObject = stream;
+            videoRef.current.srcObject = streamRef.current;
         }
     };
 
@@ -138,6 +133,8 @@ const VideoRecorder: React.FC<VideoRecorderProps> = ({ onSave, onCancel, labels 
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
+    const videoMirror = !recordedBlob && facingMode === 'user' ? 'scale-x-[-1]' : '';
+
     return (
         <div className="flex flex-col items-center bg-slate-200 rounded-2xl overflow-hidden relative shadow-lg border border-slate-300">
             <video
@@ -145,15 +142,22 @@ const VideoRecorder: React.FC<VideoRecorderProps> = ({ onSave, onCancel, labels 
                 autoPlay
                 muted={!recordedBlob}
                 playsInline
-                className="w-full h-96 object-cover bg-slate-300 scale-x-[-1]"
+                className={`w-full h-96 object-cover bg-slate-300 ${videoMirror}`}
             />
 
-            {/* Recording status overlay */}
-            <div className="absolute top-4 right-4 rtl:left-4 rtl:right-auto bg-white/80 backdrop-blur-sm text-slate-800 px-3 py-1 rounded-full text-sm font-bold font-mono shadow-sm">
-                {isRecording
-                    ? <span className="text-red-500 animate-pulse">● {labels.rec} {formatTime(timer)}</span>
-                    : labels.ready}
-            </div>
+            {/* Flip camera button */}
+            {!recordedBlob && (
+                <button
+                    onClick={handleFlipCamera}
+                    disabled={isRecording || isFlipping}
+                    className="absolute top-4 left-4 bg-white/80 backdrop-blur-sm p-2 rounded-full shadow-sm text-slate-700 hover:bg-white disabled:opacity-30 transition"
+                    title="Flip camera"
+                >
+                    {isFlipping
+                        ? <div className="w-5 h-5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+                        : <SwitchCamera size={20} />}
+                </button>
+            )}
 
             <div className="w-full bg-slate-100 p-4 flex justify-around items-center border-t border-slate-200">
                 {!recordedBlob ? (
@@ -194,17 +198,17 @@ const VideoRecorder: React.FC<VideoRecorderProps> = ({ onSave, onCancel, labels 
 
             <button
                 onClick={onCancel}
-                className="absolute top-4 left-4 rtl:right-4 rtl:left-auto text-slate-600 hover:text-slate-900 text-xs bg-white/80 px-3 py-1.5 rounded-full font-bold shadow-sm backdrop-blur-sm"
+                className="absolute bottom-20 right-4 text-slate-600 hover:text-slate-900 text-xs bg-white/80 px-3 py-1.5 rounded-full font-bold shadow-sm backdrop-blur-sm"
             >
                 {labels.cancel}
             </button>
 
             {error && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/80 gap-4 p-6 text-center">
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900 gap-4 p-6 text-center">
                     <Camera className="text-slate-400 w-12 h-12" />
                     <p className="text-white font-semibold">{error}</p>
                     <button
-                        onClick={() => { setError(''); startCamera(); }}
+                        onClick={() => startCamera(facingMode)}
                         className="px-5 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-500 transition"
                     >
                         Try Again
