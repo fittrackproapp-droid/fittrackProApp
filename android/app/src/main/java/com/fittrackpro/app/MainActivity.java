@@ -5,7 +5,7 @@ import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebChromeClient;
 
 public class MainActivity extends BridgeActivity {
-    @Override
+
     protected BridgeWebChromeClient makeBridgeWebChromeClient() {
         return new BridgeWebChromeClient(this.bridge) {
             @Override

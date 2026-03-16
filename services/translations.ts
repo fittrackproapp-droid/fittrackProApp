@@ -204,6 +204,11 @@ export const translations = {
     syncing_data: "Syncing Data...",
     please_wait: "Please wait while we process your files.",
     finishing_up: "Finishing up...",
+
+    // Push Notifications
+    push_new_submission_title: "New Submission",
+    push_workout_reviewed_title: "Workout Reviewed",
+    push_new_message_title: "New Message from Coach",
   },
   he: {
     // Auth
@@ -408,5 +413,10 @@ export const translations = {
     syncing_data: "מסנכרן נתונים...",
     please_wait: "אנא המתן בזמן שאנו מעבדים את הקבצים.",
     finishing_up: "מסיים...",
+
+    // Push Notifications
+    push_new_submission_title: "הגשה חדשה",
+    push_workout_reviewed_title: "האימון נבדק",
+    push_new_message_title: "הודעה חדשה מהמאמן",
   }
 };

@@ -585,7 +585,11 @@ const App = () => {
                     const newPending = newSubs.filter(s => s.status === 'PENDING' && !prevSubs.find(p => p.id === s.id));
                     if (newPending.length > 0) {
                         const traineeName = users.find(u => u.id === newPending[0].traineeId)?.name || 'Trainee';
-                        sendLocalNotification("New Submission", `${traineeName} just submitted a workout.`);
+                        const subExerciseNames = exercises
+                            .filter(e => newPending[0].exerciseIds.includes(e.id))
+                            .map(e => t(e.name as TranslationKey))
+                            .join(', ');
+                        sendLocalNotification(t('push_new_submission_title'), `${traineeName}: ${subExerciseNames}`);
                     }
                 }
                 
@@ -597,7 +601,11 @@ const App = () => {
                         prevSubs.find(p => p.id === s.id && p.status === 'PENDING')
                     );
                     if (newlyCompleted.length > 0) {
-                        sendLocalNotification("Workout Reviewed", "Your coach has reviewed your submission!");
+                        const reviewedExerciseNames = exercises
+                            .filter(e => newlyCompleted[0].exerciseIds.includes(e.id))
+                            .map(e => t(e.name as TranslationKey))
+                            .join(', ');
+                        sendLocalNotification(t('push_workout_reviewed_title'), `${t('msg_exercises')} ${reviewedExerciseNames}`);
                     }
                 }
             }
@@ -662,7 +670,7 @@ const App = () => {
     if (user.role === UserRole.TRAINEE) return; 
     if (receiverId) { 
         await db.sendMessage(user.id, receiverId, content); 
-        await sendPushToUser(receiverId, 'New Message from Coach', content.slice(0, 80));
+        await sendPushToUser(receiverId, t('push_new_message_title'), content.slice(0, 80));
         refreshData(); 
     } 
   };
@@ -686,7 +694,7 @@ const App = () => {
     const exerciseNames = exercises.filter(e => sub.exerciseIds.includes(e.id)).map(e => t(e.name)).join(', '); 
     const msgContent = `${t('msg_auto_review_title')}\n${t('msg_exercises')} ${exerciseNames}\n${t('msg_submitted_at')} ${new Date(sub.timestamp).toLocaleString()}`; 
     await db.sendMessage(user.id, sub.traineeId, msgContent); 
-    await sendPushToUser(sub.traineeId, 'Workout Reviewed! 🎉', 'Your coach has reviewed your submission.');
+    await sendPushToUser(sub.traineeId, t('push_workout_reviewed_title'), `${t('msg_exercises')} ${exerciseNames}`);
     refreshData(); 
   };
   
