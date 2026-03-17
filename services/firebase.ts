@@ -12,15 +12,15 @@ import { Capacitor } from '@capacitor/core';
 // 4. Copy the "firebaseConfig" object values and paste them below.
 
 const firebaseConfig = {
-  apiKey: 'AIzaSyDfckfb6JVXNGnY-0a1xL80_oTrueQwjRQ',
-  authDomain: 'fittrack-pro-app-be182.firebaseapp.com',
-  projectId: 'fittrack-pro-app-be182',
-  storageBucket: 'fittrack-pro-app-be182.firebasestorage.app',
-  messagingSenderId: '888756758530',
-  appId: '1:888756758530:web:c10f5645e57b28bf8a1f1b',
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-const isConfigured = firebaseConfig.apiKey !== 'PASTE_YOUR_NEW_API_KEY_HERE';
+const isConfigured = !!firebaseConfig.apiKey;
 
 if (!isConfigured) {
   console.warn(
@@ -43,5 +43,4 @@ export const messaging =
   isConfigured && !Capacitor.isNativePlatform() ? getMessaging(app) : null;
 
 // VAPID key is only used by the web push path.
-export const VAPID_KEY =
-  'BIQMIWKD4pRBzH4wu_bRuXi9tcqrWtzTdLYZ1eB_q8nlGZl0MT_i3tHR8yDXjegry1AbUYEwXEYWgqpp-T4C6sg';
+export const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;

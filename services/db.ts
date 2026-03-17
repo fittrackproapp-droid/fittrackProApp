@@ -37,17 +37,12 @@ import {
 // ==========================================
 
 export const STORAGE_CONFIG = {
-    // PROVIDER OPTIONS:
-    // 'FIREBASE'   - Uses Firebase Storage
-    // 'CLOUDINARY' - Uses Cloudinary (Recommended for Video)
-    PROVIDER: 'CLOUDINARY' as 'FIREBASE' | 'CLOUDINARY', 
-    
+    PROVIDER: 'CLOUDINARY' as 'FIREBASE' | 'CLOUDINARY',
     CLOUDINARY: {
-        cloudName: "dsozughdl", 
-        uploadPreset: "fittrack",
-        // API Key and Secret are required for client-side deletion.
-        apiKey: "536924668125995", 
-        apiSecret: "KlPz_QAKOAMpACJkH0Biajb7TB8" 
+        cloudName: import.meta.env.VITE_CLOUDINARY_CLOUD_NAME,
+        uploadPreset: import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET,
+        apiKey: import.meta.env.VITE_CLOUDINARY_API_KEY,
+        apiSecret: import.meta.env.VITE_CLOUDINARY_API_SECRET,
     }
 };
 
