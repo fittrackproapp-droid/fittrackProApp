@@ -415,7 +415,7 @@ export const db = {
             const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
             // Must initialize before signing in
             await GoogleAuth.initialize({
-                clientId: '888756758530-g5ka688msmf2qdkp2cqchsf5v0t49bsu.apps.googleusercontent.com',
+                clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID,
                 scopes: ['profile', 'email'],
                 grantOfflineAccess: true,
             });
