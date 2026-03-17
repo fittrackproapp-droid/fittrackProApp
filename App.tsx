@@ -83,7 +83,7 @@ const sendLocalNotification = (title: string, body: string) => {
                     icon: 'https://cdn-icons-png.flaticon.com/512/2964/2964514.png',
                     badge: 'https://cdn-icons-png.flaticon.com/512/2964/2964514.png',
                     vibrate: [200, 100, 200],
-                    tag: 'fittrack-update'
+                    tag: 'app-notification'
                 } as any);
             });
         } else {

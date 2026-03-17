@@ -4,4 +4,4 @@ publish = "dist"
 functions = "netlify/functions"
 
 [build.environment]
-SECRETS_SCAN_OMIT_PATHS = "dist,android,dist/assets,capacitor.config.ts,service-worker.js"
+SECRETS_SCAN_OMIT_PATHS = "dist,android,dist/assets,capacitor.config.ts,service-worker.js,package.json,package-lock.json"
