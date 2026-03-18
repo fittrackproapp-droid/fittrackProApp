@@ -1,49 +1,33 @@
 {
   "project_info": {
-    "project_number": "888756758530",
-    "project_id": "fittrack-pro-app-be182",
-    "storage_bucket": "fittrack-pro-app-be182.firebasestorage.app"
+    "project_number": "886934724576",
+    "project_id": "fittrack-pro-app-1",
+    "storage_bucket": "fittrack-pro-app-1.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:888756758530:android:831a1f72f293eb478a1f1b",
+        "mobilesdk_app_id": "1:886934724576:android:2a160592219df903c51585",
         "android_client_info": {
           "package_name": "com.fittrackpro.app"
         }
       },
       "oauth_client": [
         {
-          "client_id": "888756758530-0dlh36sm17sia9brrqd1n6v9dutjqv64.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.fittrackpro.app",
-            "certificate_hash": "d556cc90ea72d7c348114b27927e19c8169756cd"
-          }
-        },
-        {
-          "client_id": "888756758530-88pdm7d6fvnof3h004mbdkpfjinivh9s.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.fittrackpro.app",
-            "certificate_hash": "e1f07fab499faf831250a23b244211cbf3e63879"
-          }
-        },
-        {
-          "client_id": "888756758530-g5ka688msmf2qdkp2cqchsf5v0t49bsu.apps.googleusercontent.com",
+          "client_id": "886934724576-5ltkeffhtcev2d5jgt7nnm3t5e97ehc1.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyBJ9a2iRl16hDtAJev3any1sy3vCppH_tY"
+          "current_key": "AIzaSyCUPVuclEGTOd68b6-HH1J4uxj3wy5bb3Q"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "888756758530-g5ka688msmf2qdkp2cqchsf5v0t49bsu.apps.googleusercontent.com",
+              "client_id": "886934724576-5ltkeffhtcev2d5jgt7nnm3t5e97ehc1.apps.googleusercontent.com",
               "client_type": 3
             }
           ]
