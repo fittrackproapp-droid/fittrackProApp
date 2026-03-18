@@ -428,6 +428,7 @@ const App = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [view, setView] = useState<'DASHBOARD' | 'RECORD' | 'SESSION_HUB' | 'HISTORY' | 'ADMIN' | 'PLANNING' | 'TRAINEE_DETAILS' | 'INBOX' | 'LEADERBOARD'>('DASHBOARD');
   const [adminView, setAdminView] = useState<'USERS' | 'SUBMISSIONS'>('USERS');
+  const [pendingRoles, setPendingRoles] = useState<Record<string, UserRole>>({});
   const [loadingData, setLoadingData] = useState(false);
   const [isUploading, setIsUploading] = useState(false); // Track specifically if uploading video
   const [uploadProgress, setUploadProgress] = useState(0); 
@@ -442,6 +443,15 @@ const App = () => {
   const [currentPlanExercises, setCurrentPlanExercises] = useState<string[]>([]);
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
+  const usersRef = useRef(users);
+  useEffect(() => { usersRef.current = users; }, [users]);
+  const exercisesRef = useRef(exercises);
+  useEffect(() => { exercisesRef.current = exercises; }, [exercises]);
+  const [showAddExercise, setShowAddExercise] = useState(false);
+  const [newExercise, setNewExercise] = useState({ name: '', category: 'Chest', description: '' });
+  const [isSavingExercise, setIsSavingExercise] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   
   // Trainee specific
@@ -502,8 +512,12 @@ const App = () => {
       if (!subDoc.exists()) return;
       
       const data = subDoc.data();
+
+      const PUSH_FUNCTION_URL = import.meta.env.VITE_NETLIFY_URL
+          ? `${import.meta.env.VITE_NETLIFY_URL}/.netlify/functions/send-push`
+          : '/.netlify/functions/send-push';
       
-      await fetch('/.netlify/functions/send-push', {
+      await fetch(PUSH_FUNCTION_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -572,53 +586,76 @@ const App = () => {
         },
     );
 
-    refreshData(); // Initial fetch for static data (Users/Exercises/Messages)
-    // Messages could also be real-time, but for now we focus on submissions notifications
+    // --- Replace refreshData() with live listeners ---
+    const unsubUsers = db.subscribeToUsers((updated) => {
+        setUsers(updated);
+        // Keep current user's own data in sync (e.g. role change by admin)
+        const me = updated.find(u => u.id === user.id);
+        if (me) setUser(me);
+    });
+
+    const unsubExercises = db.subscribeToExercises((updated) => {
+        setExercises(updated);
+    });
+
+    const unsubMessages = db.subscribeToMessages(user.id, (updated) => {
+        setMessages(updated);
+    });
     
     // Subscribe to Submissions for real-time updates and notifications
-    const unsubscribeSubs = db.subscribeToSubmissions((newSubs) => {
+    const unsubSubs = db.subscribeToSubmissions((newSubs) => {
         setSubmissions((prevSubs) => {
-            // Check for notifications only if we have previous data (to avoid notifying on initial load)
-            if (prevSubs.length > 0) {
-                // 1. Coach Notification: New Submission (PENDING) added
-                if (user.role === UserRole.COACH) {
-                    const newPending = newSubs.filter(s => s.status === 'PENDING' && !prevSubs.find(p => p.id === s.id));
+            const currentUser = userRef.current;
+            const currentUsers = usersRef.current;
+            const currentExercises = exercisesRef.current;
+
+            if (prevSubs.length > 0 && currentUser) {
+                // Coach: new PENDING submission arrived
+                if (currentUser.role === UserRole.COACH) {
+                    const newPending = newSubs.filter(
+                        s => s.status === 'PENDING' && !prevSubs.find(p => p.id === s.id)
+                    );
                     if (newPending.length > 0) {
-                        const traineeName = users.find(u => u.id === newPending[0].traineeId)?.name || 'Trainee';
-                        const subExerciseNames = exercises
+                        const traineeName = currentUsers.find(u => u.id === newPending[0].traineeId)?.name || 'Trainee';
+                        const subExerciseNames = currentExercises
                             .filter(e => newPending[0].exerciseIds.includes(e.id))
                             .map(e => t(e.name as TranslationKey))
                             .join(', ');
                         sendLocalNotification(t('push_new_submission_title'), `${traineeName}: ${subExerciseNames}`);
+                        sendPushToUser(currentUser.id, t('push_new_submission_title'), `${traineeName}: ${subExerciseNames}`);
                     }
                 }
-                
-                // 2. Trainee Notification: Submission marked COMPLETED (Feedback received)
-                if (user.role === UserRole.TRAINEE) {
-                    const newlyCompleted = newSubs.filter(s => 
-                        s.traineeId === user.id && 
-                        s.status === 'COMPLETED' && 
+
+                // Trainee: submission marked COMPLETED (feedback received)
+                if (currentUser.role === UserRole.TRAINEE) {
+                    const newlyCompleted = newSubs.filter(s =>
+                        s.traineeId === currentUser.id &&
+                        s.status === 'COMPLETED' &&
                         prevSubs.find(p => p.id === s.id && p.status === 'PENDING')
                     );
                     if (newlyCompleted.length > 0) {
-                        const reviewedExerciseNames = exercises
+                        const reviewedExerciseNames = currentExercises
                             .filter(e => newlyCompleted[0].exerciseIds.includes(e.id))
                             .map(e => t(e.name as TranslationKey))
                             .join(', ');
                         sendLocalNotification(t('push_workout_reviewed_title'), `${t('msg_exercises')} ${reviewedExerciseNames}`);
+                        sendPushToUser(newlyCompleted[0].traineeId, t('push_workout_reviewed_title'), reviewedExerciseNames);
                     }
                 }
             }
+
             return newSubs;
         });
     });
 
-    // Cleanup subscription
     return () => {
-        if (unsubscribeSubs) unsubscribeSubs();
+        if (unsubUsers) unsubUsers();
+        if (unsubExercises) unsubExercises();
+        if (unsubMessages) unsubMessages();
+        if (unsubSubs) unsubSubs();
         cleanupNativePushNotifications();
     };
-  }, [user]); // Re-subscribe if user changes
+  }, [user?.id]); // use user.id not user to avoid re-running on shallow object changes
 
   const t = (key: string): string => {
       // @ts-ignore
@@ -652,6 +689,25 @@ const App = () => {
     }
   };
 
+  const handleAddExercise = async () => {
+    if (!newExercise.name.trim()) return;
+    setIsSavingExercise(true);
+    try {
+      const ex: Exercise = {
+        id: crypto.randomUUID(),
+        name: newExercise.name.trim(),
+        category: newExercise.category,
+        description: newExercise.description.trim(),
+      };
+      await db.saveExercise(ex);
+      setNewExercise({ name: '', category: 'Chest', description: '' });
+      setShowAddExercise(false);
+      await refreshData();
+    } finally {
+      setIsSavingExercise(false);
+    }
+  };
+
   const handleLogout = async () => { 
       await db.logout(); 
       setUser(null); 
@@ -676,7 +732,17 @@ const App = () => {
   };
   const handleMarkRead = async (messageIds: string[]) => { await db.markMessagesAsRead(messageIds); refreshData(); };
   const unreadCount = messages.filter(m => m.receiverId === user?.id && !m.read).length;
-  const handleRoleChange = async (userId: string, newRole: UserRole) => { const u = users.find(x => x.id === userId); if(u) { await db.updateUser({ ...u, role: newRole, coachId: (newRole === UserRole.COACH || newRole === UserRole.ADMIN) ? null : u.coachId }); refreshData(); } };
+  const handleRoleChange = async (userId: string, newRole: UserRole) => {
+      const u = users.find(x => x.id === userId);
+      if (!u) return;
+      try {
+          await db.updateUser({ ...u, role: newRole, coachId: (newRole === UserRole.COACH || newRole === UserRole.ADMIN) ? null : u.coachId });
+          await refreshData();
+      } catch (e: any) {
+          console.error("Failed to update user role:", e);
+          alert("Failed to update user role: " + (e.message || e));
+      }
+  };
   const handleUpdatePoints = async (userId: string, points: number) => { const u = users.find(x => x.id === userId); if(u) { await db.updateUser({ ...u, points }); refreshData(); } };
   const handleDeleteUser = (userId: string) => { setDeleteUserConfirm(userId); };
   const confirmUserDelete = async () => { if (!deleteUserConfirm) return; const userId = deleteUserConfirm; setDeleteUserConfirm(null); try { await db.deleteUser(userId); refreshData(); } catch (e: any) { console.error("Delete user failed:", e); alert("Failed to delete user. " + (e.message || "Unknown error")); } }
@@ -813,7 +879,19 @@ const App = () => {
     } 
   };
   
-  const generateAiExercises = async () => { if (!aiPrompt) return; setIsGenerating(true); const newExercises = await generateExerciseSuggestions(aiPrompt); for (const ex of newExercises) { await db.saveExercise(ex); } refreshData(); setIsGenerating(false); setAiPrompt(''); };
+  const generateAiExercises = async () => {
+      if (!aiPrompt) return;
+      setIsGenerating(true);
+      const suggested = await generateExerciseSuggestions(aiPrompt);
+      // Only persist exercises that don't already exist in Firestore
+      for (const ex of suggested) {
+          if (!exercises.find(e => e.id === ex.id)) {
+              await db.saveExercise(ex);
+          }
+      }
+      setIsGenerating(false);
+      setAiPrompt('');
+  };
 
   const renderSubmissionsList = (subs: Submission[], showTraineeName = false) => {
       if (subs.length === 0) return <p className="text-gray-500 italic p-4 text-center text-sm">{t('no_submissions_found')}</p>;
@@ -1145,7 +1223,26 @@ const App = () => {
                                         <div className="flex items-center gap-3"><div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${u.role === UserRole.COACH ? 'bg-purple-100 text-purple-600' : u.role === UserRole.ADMIN ? 'bg-gray-800 text-white' : 'bg-green-100 text-green-600'}`}>{u.name.charAt(0)}</div><div><p className="font-medium text-gray-900">{u.name}</p><p className="text-xs text-gray-500">{u.email}</p></div></div>
                                         <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto items-center">
                                             {u.role === UserRole.TRAINEE && (<div className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded border border-gray-200"><Trophy size={14} className="text-amber-500"/><input type="number" className="w-16 bg-transparent outline-none text-sm font-bold text-center" defaultValue={u.points} onBlur={(e) => handleUpdatePoints(u.id, parseInt(e.target.value) || 0)} /><span className="text-[10px] text-gray-400">pts</span></div>)}
-                                            <select value={u.role} onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)} className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white focus:ring-2 focus:ring-indigo-100 outline-none"><option value={UserRole.TRAINEE}>{t('role_trainee')}</option><option value={UserRole.COACH}>{t('role_coach')}</option><option value={UserRole.ADMIN}>{t('role_admin')}</option></select>
+                                            <select
+                                              value={pendingRoles[u.id] ?? u.role}
+                                              onChange={(e) => setPendingRoles(prev => ({ ...prev, [u.id]: e.target.value as UserRole }))}
+                                              className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white focus:ring-2 focus:ring-indigo-100 outline-none"
+                                            >
+                                              <option value={UserRole.TRAINEE}>{t('role_trainee')}</option>
+                                              <option value={UserRole.COACH}>{t('role_coach')}</option>
+                                              <option value={UserRole.ADMIN}>{t('role_admin')}</option>
+                                            </select>
+                                            {pendingRoles[u.id] && pendingRoles[u.id] !== u.role && (
+                                              <button
+                                                onClick={() => {
+                                                  handleRoleChange(u.id, pendingRoles[u.id]!);
+                                                  setPendingRoles(prev => { const n = { ...prev }; delete n[u.id]; return n; });
+                                                }}
+                                                className="px-3 py-1 bg-indigo-600 text-white text-xs rounded-lg font-bold hover:bg-indigo-700 transition"
+                                              >
+                                                {t('save')}
+                                              </button>
+                                            )}
                                             <button onClick={() => handleDeleteUser(u.id)} className="p-2 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition" title="Delete User"><Trash2 size={18} /></button>
                                         </div>
                                     </div>
@@ -1217,7 +1314,48 @@ const App = () => {
                 <div className="space-y-6">
                     <div className="flex items-center justify-between"><button onClick={() => setView('TRAINEE_DETAILS')} className="text-gray-500 hover:text-gray-800 flex items-center gap-1 text-sm font-medium"><ChevronPrev size={16} /> {t('back_profile')}</button><div className="flex items-center gap-2"><span className="text-sm text-gray-500">{t('editing_program')}</span><span className="font-bold text-lg bg-white px-3 py-1 rounded shadow-sm">{users.find(u => u.id === selectedTraineeId)?.name}</span></div></div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[calc(100vh-200px)]">
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden"><div className="p-4 border-b border-gray-100 bg-gray-50"><h3 className="font-bold text-gray-700 mb-2">{t('exercise_library')}</h3><div className="flex gap-2"><input className="flex-1 px-3 py-2 text-sm border rounded-lg" placeholder={t('ai_search_placeholder')} value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} /><button onClick={generateAiExercises} disabled={isGenerating || !aiPrompt} className="bg-purple-100 text-purple-700 px-3 py-2 rounded-lg text-xs font-bold hover:bg-purple-200 disabled:opacity-50">{isGenerating ? 'AI...' : <Sparkles size={16}/>}</button></div></div><div className="flex-1 overflow-y-auto p-2 space-y-1">{exercises.map(ex => (<div key={ex.id} className="group flex justify-between items-center p-3 hover:bg-gray-50 rounded-lg border border-transparent hover:border-gray-100 transition"><div className="flex items-center gap-3"><div className="text-indigo-400 bg-indigo-50 p-2 rounded-lg">{getCategoryIcon(ex.category)}</div><div><p className="font-medium text-sm">{t(ex.name)}</p><p className="text-[10px] text-gray-500 uppercase tracking-wide">{t(ex.category)}</p></div></div><button onClick={() => !currentPlanExercises.includes(ex.id) && setCurrentPlanExercises([...currentPlanExercises, ex.id])} disabled={currentPlanExercises.includes(ex.id)} className="text-indigo-600 hover:bg-indigo-50 p-1.5 rounded-md disabled:text-gray-300"><PlusCircle size={20} /></button></div>))}</div></div>
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden"><div className="p-4 border-b border-gray-100 bg-gray-50">
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="font-bold text-gray-700">{t('exercise_library')}</h3>
+                          <button
+                            onClick={() => setShowAddExercise(v => !v)}
+                            className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition"
+                          >
+                            <PlusCircle size={14} /> {t('add_exercise')}
+                          </button>
+                        </div>
+                        {showAddExercise && (
+                          <div className="mb-3 p-3 bg-indigo-50 border border-indigo-100 rounded-xl space-y-2">
+                            <input
+                              className="w-full px-3 py-2 text-sm border rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
+                              placeholder={t('exercise_name')}
+                              value={newExercise.name}
+                              onChange={e => setNewExercise(p => ({ ...p, name: e.target.value }))}
+                            />
+                            <select
+                              className="w-full px-3 py-2 text-sm border rounded-lg bg-white outline-none focus:ring-2 focus:ring-indigo-200"
+                              value={newExercise.category}
+                              onChange={e => setNewExercise(p => ({ ...p, category: e.target.value }))}
+                            >
+                              {['Chest','Back','Legs','Shoulders','Arms','Core','Cardio'].map(c => (
+                                <option key={c} value={c}>{t(c)}</option>
+                              ))}
+                            </select>
+                            <input
+                              className="w-full px-3 py-2 text-sm border rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
+                              placeholder={t('exercise_description')}
+                              value={newExercise.description}
+                              onChange={e => setNewExercise(p => ({ ...p, description: e.target.value }))}
+                            />
+                            <div className="flex gap-2">
+                              <Button className="flex-1 text-sm py-1.5" onClick={handleAddExercise} disabled={isSavingExercise || !newExercise.name.trim()}>
+                                {isSavingExercise ? <Loader2 size={14} className="animate-spin" /> : t('save')}
+                              </Button>
+                              <button onClick={() => setShowAddExercise(false)} className="text-sm text-gray-400 hover:text-gray-600 px-3">{t('cancel')}</button>
+                            </div>
+                          </div>
+                        )}
+                        <div className="flex gap-2"><input className="flex-1 px-3 py-2 text-sm border rounded-lg" placeholder={t('ai_search_placeholder')} value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} /><button onClick={generateAiExercises} disabled={isGenerating || !aiPrompt} className="bg-purple-100 text-purple-700 px-3 py-2 rounded-lg text-xs font-bold hover:bg-purple-200 disabled:opacity-50">{isGenerating ? 'AI...' : <Sparkles size={16}/>}</button></div></div><div className="flex-1 overflow-y-auto p-2 space-y-1">{exercises.map(ex => (<div key={ex.id} className="group flex justify-between items-center p-3 hover:bg-gray-50 rounded-lg border border-transparent hover:border-gray-100 transition"><div className="flex items-center gap-3"><div className="text-indigo-400 bg-indigo-50 p-2 rounded-lg">{getCategoryIcon(ex.category)}</div><div><p className="font-medium text-sm">{t(ex.name)}</p><p className="text-[10px] text-gray-500 uppercase tracking-wide">{t(ex.category)}</p></div></div><button onClick={() => !currentPlanExercises.includes(ex.id) && setCurrentPlanExercises([...currentPlanExercises, ex.id])} disabled={currentPlanExercises.includes(ex.id)} className="text-indigo-600 hover:bg-indigo-50 p-1.5 rounded-md disabled:text-gray-300"><PlusCircle size={20} /></button></div>))}</div></div>
                         <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden"><div className="p-4 border-b border-gray-100 bg-indigo-50/50 flex justify-between items-center"><h3 className="font-bold text-indigo-900">{t('current_program')}</h3><span className="text-xs font-medium text-indigo-600">{currentPlanExercises.length} {t('exercises_count')}</span></div><div className="flex-1 overflow-y-auto p-2 space-y-1 bg-gray-50/30">{currentPlanExercises.length === 0 && (<div className="h-full flex flex-col items-center justify-center text-gray-400"><div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-2"><Dumbbell className="opacity-50"/></div><p className="text-sm">{t('no_exercises_assigned')}</p></div>)}{currentPlanExercises.map((id, index) => { const ex = exercises.find(e => e.id === id); if(!ex) return null; return (<div key={id} className="flex justify-between items-center p-3 bg-white shadow-sm rounded-lg border border-gray-100"><div className="flex items-center gap-3"><span className="text-xs font-bold text-gray-300 w-4">{index + 1}</span><div className="flex items-center gap-2"><div className="text-indigo-400">{getCategoryIcon(ex.category)}</div><div><p className="font-medium text-sm text-gray-900">{t(ex.name)}</p><p className="text-xs text-gray-500 truncate max-w-[150px]">{ex.description}</p></div></div></div><button onClick={() => setCurrentPlanExercises(currentPlanExercises.filter(x => x !== id))} className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded"><Trash2 size={16} /></button></div>); })}</div><div className="p-4 border-t border-gray-100 bg-white"><Button className="w-full" onClick={saveTraineePlan}>{t('save_program')}</Button></div></div>
                     </div>
                 </div>

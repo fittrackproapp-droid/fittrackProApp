@@ -325,9 +325,54 @@ export const db = {
       });
   },
 
+  subscribeToUsers: (callback: (users: User[]) => void) => {
+      if (!isFirebaseConfigured) return;
+      return onSnapshot(collection(dbFirestore, "users"), (snapshot) => {
+          const users: User[] = [];
+          snapshot.forEach(doc => users.push(doc.data() as User));
+          callback(users);
+      });
+  },
+
+  subscribeToExercises: (callback: (exercises: Exercise[]) => void) => {
+      if (!isFirebaseConfigured) return;
+      return onSnapshot(collection(dbFirestore, "exercises"), (snapshot) => {
+          const exercises: Exercise[] = [];
+          snapshot.forEach(doc => exercises.push(doc.data() as Exercise));
+          // Seed if empty (first load)
+          if (exercises.length === 0) {
+              MOCK_EXERCISES.forEach(ex => setDoc(doc(dbFirestore, "exercises", ex.id), ex));
+              callback(MOCK_EXERCISES);
+          } else {
+              callback(exercises);
+          }
+      });
+  },
+
+  subscribeToMessages: (userId: string, callback: (messages: Message[]) => void) => {
+      if (!isFirebaseConfigured) return;
+      const q = query(collection(dbFirestore, "messages"), orderBy("timestamp", "asc"));
+      return onSnapshot(q, (snapshot) => {
+          const all: Message[] = [];
+          snapshot.forEach(doc => all.push(doc.data() as Message));
+          callback(all.filter(m => m.senderId === userId || m.receiverId === userId));
+      });
+  },
+
   logout: async () => {
-    if (!isFirebaseConfigured) return;
-    await signOut(auth);
+      if (!isFirebaseConfigured) return;
+
+      // Sign out from Google Auth plugin on native (clears the cached account)
+      if (Capacitor.isNativePlatform()) {
+          try {
+              const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
+              await GoogleAuth.signOut();
+          } catch (e) {
+              console.warn('GoogleAuth signOut failed:', e);
+          }
+      }
+
+      await signOut(auth);
   },
 
   // --- EXISTING METHODS ---
@@ -458,7 +503,8 @@ export const db = {
 
   updateUser: async (updatedUser: User) => {
       if (!isFirebaseConfigured) throw new Error("Firebase not configured");
-      await setDoc(doc(dbFirestore, "users", updatedUser.id), updatedUser, { merge: true });
+      const { id, ...fields } = updatedUser;
+      await updateDoc(doc(dbFirestore, "users", id), fields as any);
   },
 
   updateUserPoints: async (userId: string, points: number) => {

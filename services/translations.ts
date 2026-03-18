@@ -81,6 +81,9 @@ export const translations = {
     no_exercises_assigned: "No exercises assigned yet.",
     save_program: "Save Program",
     program_saved: "Workout plan updated successfully!",
+    add_exercise: "Add Exercise",
+    exercise_name: "Exercise name",
+    exercise_description: "Short description (optional)",
 
     // Inbox
     inbox: "Inbox",
@@ -288,6 +291,9 @@ export const translations = {
     no_exercises_assigned: "לא הוקצו תרגילים עדיין.",
     save_program: "שמור תוכנית",
     program_saved: "תוכנית האימונים עודכנה בהצלחה!",
+    add_exercise: "הוסף תרגיל",
+    exercise_name: "שם התרגיל",
+    exercise_description: "תיאור קצר (אופציונלי)",
 
     // Inbox
     inbox: "תיבת דואר",

@@ -36,18 +36,10 @@ export const generateExerciseSuggestions = async (prompt: string): Promise<Exerc
         ex.category.toLowerCase().includes(lowerPrompt)
     );
 
-    // If no match, return some random defaults
     if (filtered.length === 0) {
-        return LIBRARY_EXERCISES.slice(0, 3).map(ex => ({
-            ...ex,
-            id: crypto.randomUUID()
-        }));
+        return LIBRARY_EXERCISES.slice(0, 3);
     }
-
-    return filtered.map(ex => ({
-        ...ex,
-        id: crypto.randomUUID()
-    }));
+    return filtered;
 };
 
 /**
