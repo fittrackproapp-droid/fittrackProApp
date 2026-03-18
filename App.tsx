@@ -507,30 +507,38 @@ const App = () => {
   };
 
   const sendPushToUser = async (targetUserId: string, title: string, body: string) => {
-    try {
-      const subDoc = await getDoc(doc(dbFirestore, 'pushSubscriptions', targetUserId));
-      if (!subDoc.exists()) return;
-      
-      const data = subDoc.data();
+      try {
+          const subDoc = await getDoc(doc(dbFirestore, 'pushSubscriptions', targetUserId));
+          if (!subDoc.exists()) {
+              console.warn('[Push] No subscription found for user:', targetUserId);
+              return;
+          }
 
-      const PUSH_FUNCTION_URL = import.meta.env.VITE_NETLIFY_URL
-          ? `${import.meta.env.VITE_NETLIFY_URL}/.netlify/functions/send-push`
-          : '/.netlify/functions/send-push';
-      
-      await fetch(PUSH_FUNCTION_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subscription: data.subscription || null,
-          nativeFcmToken: data.nativeFcmToken || null,
-          title,
-          body
-        })
-      });
-    } catch (err) {
-      console.error('Failed to send push:', err);
-    }
+          const data = subDoc.data();
+          console.log('[Push] Sending to:', targetUserId, data);
+
+          const pushUrl = Capacitor.isNativePlatform()
+              ? `${import.meta.env.VITE_NETLIFY_URL}/.netlify/functions/send-push`
+              : '/.netlify/functions/send-push';
+
+          const res = await fetch(pushUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  subscription: data.subscription || null,
+                  nativeFcmToken: data.nativeFcmToken || null,
+                  title,
+                  body
+              })
+          });
+
+          const result = await res.json();
+          console.log('[Push] Function response:', res.status, result);
+      } catch (err) {
+          console.error('[Push] sendPushToUser failed:', err);
+      }
   };
+
   // --- Auth Persistence Logic ---
   useEffect(() => {
     const unsubscribe = db.subscribeToAuth((restoredUser) => {
@@ -858,11 +866,15 @@ const App = () => {
             await db.saveSubmission(sub); 
         } 
         if (user.coachId) { 
-            const exerciseNames = exercises.filter(e => recordingExercises.includes(e.id)).map(e => t(e.name)).join(', '); 
-            const msgContent = `${t('msg_auto_submission_title')}\n${t('msg_exercises')} ${exerciseNames}\n${t('msg_submitted_at')} ${new Date().toLocaleString()}`; 
-            await db.sendMessage(user.id, user.coachId, msgContent); 
-            await sendPushToUser(user.coachId, 'New Workout Submission', `${user.name} submitted a workout.`);
-        } 
+            const exerciseNames = exercises.filter(e => recordingExercises.includes(e.id)).map(e => t(e.name as TranslationKey)).join(', ');
+            const msgContent = `${t('msg_auto_submission_title')}\n${t('msg_exercises')} ${exerciseNames}\n${t('msg_submitted_at')} ${new Date().toLocaleString()}`;
+            await db.sendMessage(user.id, user.coachId, msgContent);
+            await sendPushToUser(
+                user.coachId,
+                t('push_new_submission_title'),
+                `${user.name}: ${exerciseNames}`
+            );
+        }
         await refreshData(); 
         setView('DASHBOARD'); 
         setRecordingExercises([]); 
