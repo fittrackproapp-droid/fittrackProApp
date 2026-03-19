@@ -362,13 +362,19 @@ export const db = {
   logout: async () => {
       if (!isFirebaseConfigured) return;
 
-      // Sign out from Google Auth plugin on native (clears the cached account)
       if (Capacitor.isNativePlatform()) {
           try {
               const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
+              // Initialize first to ensure GoogleSignInClient is not null
+              await GoogleAuth.initialize({
+                  clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+                  scopes: ['profile', 'email'],
+                  grantOfflineAccess: true,
+              });
               await GoogleAuth.signOut();
           } catch (e) {
-              console.warn('GoogleAuth signOut failed:', e);
+              // Non-fatal — user may not have signed in via Google this session
+              console.warn('GoogleAuth signOut skipped:', e);
           }
       }
 

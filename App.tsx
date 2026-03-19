@@ -552,6 +552,27 @@ const App = () => {
     };
   }, []);
 
+  // Re-initialize GoogleAuth when app returns from background
+  useEffect(() => {
+      if (!Capacitor.isNativePlatform()) return;
+
+      const handleFocus = async () => {
+          try {
+              const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
+              await GoogleAuth.initialize({
+                  clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+                  scopes: ['profile', 'email'],
+                  grantOfflineAccess: true,
+              });
+          } catch (e) {
+              console.warn('GoogleAuth re-init failed:', e);
+          }
+      };
+
+      window.addEventListener('focus', handleFocus);
+      return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
   // Web only — catches the redirect result after Google sends the user back to Netlify
   // Native Android uses Capacitor Google Auth plugin (no redirect needed)
   useEffect(() => {
