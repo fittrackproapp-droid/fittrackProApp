@@ -28,7 +28,7 @@ const VideoRecorder: React.FC<VideoRecorderProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null); // always up-to-date, no stale closure issue
+  const streamRef = useRef<MediaStream | null>(null);
 
   const [isRecording, setIsRecording] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
@@ -57,7 +57,6 @@ const VideoRecorder: React.FC<VideoRecorderProps> = ({
   }, [isRecording]);
 
   const stopCurrentStream = () => {
-    // Always reads from ref — never stale
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
   };
@@ -65,10 +64,7 @@ const VideoRecorder: React.FC<VideoRecorderProps> = ({
   const startCamera = async (facing: "environment" | "user") => {
     setError("");
     try {
-      // Stop existing stream first via ref (always current)
       stopCurrentStream();
-
-      // Give Android a moment to fully release the camera hardware
       await new Promise((res) => setTimeout(res, 300));
 
       const s = await navigator.mediaDevices.getUserMedia({
@@ -76,7 +72,7 @@ const VideoRecorder: React.FC<VideoRecorderProps> = ({
         audio: true,
       });
 
-      streamRef.current = s; // update ref immediately
+      streamRef.current = s;
       setFacingMode(facing);
 
       if (videoRef.current) {
@@ -143,10 +139,16 @@ const VideoRecorder: React.FC<VideoRecorderProps> = ({
     }
   };
 
+  /** Format elapsed seconds as HH:MM:SS */
   const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return [
+      h.toString().padStart(2, "0"),
+      m.toString().padStart(2, "0"),
+      s.toString().padStart(2, "0"),
+    ].join(":");
   };
 
   const videoMirror =
@@ -154,13 +156,35 @@ const VideoRecorder: React.FC<VideoRecorderProps> = ({
 
   return (
     <div className="flex flex-col items-center bg-slate-200 rounded-2xl overflow-hidden relative shadow-lg border border-slate-300">
-      <video
-        ref={videoRef}
-        autoPlay
-        muted={!recordedBlob}
-        playsInline
-        className={`w-full h-96 object-cover bg-slate-300 ${videoMirror}`}
-      />
+      {/* Video preview */}
+      <div className="relative w-full">
+        <video
+          ref={videoRef}
+          autoPlay
+          muted={!recordedBlob}
+          playsInline
+          className={`w-full h-96 object-cover bg-slate-300 ${videoMirror}`}
+        />
+
+        {/* ── Recording timer overlay ── */}
+        {isRecording && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-4 py-1.5 rounded-full shadow-lg pointer-events-none select-none">
+            {/* Pulsing red dot */}
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+            </span>
+            {/* HH:MM:SS counter */}
+            <span className="text-white font-mono font-bold text-base tracking-widest">
+              {formatTime(timer)}
+            </span>
+            {/* REC label */}
+            <span className="text-red-400 text-[10px] font-extrabold uppercase tracking-widest">
+              {labels.rec}
+            </span>
+          </div>
+        )}
+      </div>
 
       {/* Flip camera button */}
       {!recordedBlob && (
@@ -178,6 +202,7 @@ const VideoRecorder: React.FC<VideoRecorderProps> = ({
         </button>
       )}
 
+      {/* Controls */}
       <div className="w-full bg-slate-100 p-4 flex justify-around items-center border-t border-slate-200">
         {!recordedBlob ? (
           !isRecording ? (

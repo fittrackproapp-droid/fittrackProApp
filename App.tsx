@@ -1991,15 +1991,16 @@ const App = () => {
                   ? users.find((u) => u.id === selectedTraineeId)
                   : users.find((u) => u.id === user.coachId)
               }
-              messages={messages.filter((m) =>
-                user.role === UserRole.TRAINEE
-                  ? m.receiverId === user.id || m.senderId === user.id
-                  : selectedTraineeId
-                    ? (m.senderId === user.id &&
-                        m.receiverId === selectedTraineeId) ||
-                      (m.senderId === selectedTraineeId &&
-                        m.receiverId === user.id)
-                    : true, // Pass all messages to inbox view if no trainee selected
+              messages={messages.filter(
+                (m) =>
+                  user.role === UserRole.TRAINEE
+                    ? m.receiverId === user.id || m.senderId === user.id
+                    : selectedTraineeId
+                      ? (m.senderId === user.id &&
+                          m.receiverId === selectedTraineeId) ||
+                        (m.senderId === selectedTraineeId &&
+                          m.receiverId === user.id)
+                      : true, // Pass all messages to inbox view if no trainee selected
               )}
               onSendMessage={
                 user.role === UserRole.COACH ? handleSendMessage : undefined
