@@ -1,16 +1,50 @@
-
-import { Exercise } from '../types';
+import { Exercise } from "../types";
 
 // Mock list of exercises for simple keyword-based suggestions
 const LIBRARY_EXERCISES: Exercise[] = [
-  { id: 'c1', name: 'Barbell Bench Press', category: 'Chest', description: 'Compound chest exercise.' },
-  { id: 'c2', name: 'Incline Dumbbell Press', category: 'Chest', description: 'Upper chest focus.' },
-  { id: 'b1', name: 'Deadlift', category: 'Back', description: 'Full body compound.' },
-  { id: 'b2', name: 'Pull-ups', category: 'Back', description: 'Vertical pull.' },
-  { id: 'l1', name: 'Barbell Squat', category: 'Legs', description: 'King of leg exercises.' },
-  { id: 's1', name: 'Overhead Press', category: 'Shoulders', description: 'Vertical push.' },
-  { id: 'a1', name: 'Barbell Curls', category: 'Arms', description: 'Bicep builder.' },
-  { id: 'x1', name: 'Plank', category: 'Core', description: 'Static hold.' },
+  {
+    id: "c1",
+    name: "Barbell Bench Press",
+    category: "Chest",
+    description: "Compound chest exercise.",
+  },
+  {
+    id: "c2",
+    name: "Incline Dumbbell Press",
+    category: "Chest",
+    description: "Upper chest focus.",
+  },
+  {
+    id: "b1",
+    name: "Deadlift",
+    category: "Back",
+    description: "Full body compound.",
+  },
+  {
+    id: "b2",
+    name: "Pull-ups",
+    category: "Back",
+    description: "Vertical pull.",
+  },
+  {
+    id: "l1",
+    name: "Barbell Squat",
+    category: "Legs",
+    description: "King of leg exercises.",
+  },
+  {
+    id: "s1",
+    name: "Overhead Press",
+    category: "Shoulders",
+    description: "Vertical push.",
+  },
+  {
+    id: "a1",
+    name: "Barbell Curls",
+    category: "Arms",
+    description: "Bicep builder.",
+  },
+  { id: "x1", name: "Plank", category: "Core", description: "Static hold." },
 ];
 
 const MOTIVATIONAL_QUOTES = [
@@ -20,35 +54,40 @@ const MOTIVATIONAL_QUOTES = [
   "Great effort today, you're getting stronger!",
   "Consistency is key, and you nailed it today.",
   "That was a strong session. Well done!",
-  "Patience and persistence pay off. Great job!"
+  "Patience and persistence pay off. Great job!",
 ];
 
 /**
  * Replaces the AI-powered exercise suggestion with a simple keyword filter.
  */
-export const generateExerciseSuggestions = async (prompt: string): Promise<Exercise[]> => {
-    // Delay slightly to simulate a "service" call
-    await new Promise(r => setTimeout(r, 400));
-    
-    const lowerPrompt = prompt.toLowerCase();
-    const filtered = LIBRARY_EXERCISES.filter(ex => 
-        ex.name.toLowerCase().includes(lowerPrompt) || 
-        ex.category.toLowerCase().includes(lowerPrompt)
-    );
+export const generateExerciseSuggestions = async (
+  prompt: string,
+): Promise<Exercise[]> => {
+  // Delay slightly to simulate a "service" call
+  await new Promise((r) => setTimeout(r, 400));
 
-    if (filtered.length === 0) {
-        return LIBRARY_EXERCISES.slice(0, 3);
-    }
-    return filtered;
+  const lowerPrompt = prompt.toLowerCase();
+  const filtered = LIBRARY_EXERCISES.filter(
+    (ex) =>
+      ex.name.toLowerCase().includes(lowerPrompt) ||
+      ex.category.toLowerCase().includes(lowerPrompt),
+  );
+
+  if (filtered.length === 0) {
+    return LIBRARY_EXERCISES.slice(0, 3);
+  }
+  return filtered;
 };
 
 /**
  * Replaces the AI-powered feedback with a randomized static quote.
  */
-export const getMotivationalFeedback = async (exerciseNames: string): Promise<string> => {
-    // Delay slightly to simulate a "service" call
-    await new Promise(r => setTimeout(r, 200));
-    
-    const randomIndex = Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length);
-    return MOTIVATIONAL_QUOTES[randomIndex];
+export const getMotivationalFeedback = async (
+  exerciseNames: string,
+): Promise<string> => {
+  // Delay slightly to simulate a "service" call
+  await new Promise((r) => setTimeout(r, 200));
+
+  const randomIndex = Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length);
+  return MOTIVATIONAL_QUOTES[randomIndex];
 };

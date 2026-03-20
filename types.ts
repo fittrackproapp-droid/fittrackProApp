@@ -1,8 +1,7 @@
-
 export enum UserRole {
-  ADMIN = 'ADMIN',
-  COACH = 'COACH',
-  TRAINEE = 'TRAINEE'
+  ADMIN = "ADMIN",
+  COACH = "COACH",
+  TRAINEE = "TRAINEE",
 }
 
 export interface User {
@@ -38,7 +37,7 @@ export interface Submission {
   exerciseIds: string[]; // Which exercises were performed in this specific session
   videoIds: string[]; // List of Keys for IndexedDB (supports multiple videos)
   timestamp: number;
-  status: 'PENDING' | 'COMPLETED';
+  status: "PENDING" | "COMPLETED";
   feedback?: string;
   traineeNote?: string; // Note from trainee to coach
   pointsAwarded?: number; // Points given for this specific session

@@ -1,9 +1,9 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-import { getMessaging } from 'firebase/messaging';
-import { getStorage } from 'firebase/storage';
-import { Capacitor } from '@capacitor/core';
+import { initializeApp } from "firebase/app";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
+import { getMessaging } from "firebase/messaging";
+import { getStorage } from "firebase/storage";
+import { Capacitor } from "@capacitor/core";
 
 // --- MIGRATION INSTRUCTIONS ---
 // 1. Log into your NEW Google Account at https://console.firebase.google.com/
@@ -24,7 +24,7 @@ const isConfigured = !!firebaseConfig.apiKey;
 
 if (!isConfigured) {
   console.warn(
-    '⚠️ FIREBASE NOT CONFIGURED: Using placeholder config. Database operations will fail or mock.',
+    "⚠️ FIREBASE NOT CONFIGURED: Using placeholder config. Database operations will fail or mock.",
   );
 }
 

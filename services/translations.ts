@@ -1,5 +1,4 @@
-
-export type Language = 'en' | 'he';
+export type Language = "en" | "he";
 export type TranslationKey = keyof typeof translations.en;
 
 export const translations = {
@@ -135,7 +134,8 @@ export const translations = {
     save_workout: "Save Workout",
     selected_for_session: "Selected for this session",
     camera_error: "Camera access denied or unavailable.",
-    no_media_yet: "No videos yet. Record or upload a video to finish the workout.",
+    no_media_yet:
+      "No videos yet. Record or upload a video to finish the workout.",
     videos_count: "Videos",
     add_notes: "Add notes for coach (optional)...",
 
@@ -156,9 +156,11 @@ export const translations = {
     all_submissions: "All Workouts",
     manage_users: "Manage Users",
     delete_user_title: "Delete User?",
-    delete_user_warning: "This will permanently delete the user. This action cannot be undone.",
+    delete_user_warning:
+      "This will permanently delete the user. This action cannot be undone.",
     delete_video_title: "Delete Video?",
-    delete_video_warning: "This will permanently remove the video from storage and cannot be undone.",
+    delete_video_warning:
+      "This will permanently remove the video from storage and cannot be undone.",
     delete_action: "Delete",
 
     // Categories & Exercises (Mapping)
@@ -173,14 +175,14 @@ export const translations = {
     "Incline Dumbbell Press": "Incline Dumbbell Press",
     "Cable Flyes": "Cable Flyes",
     "Push-ups": "Push-ups",
-    "Deadlift": "Deadlift",
+    Deadlift: "Deadlift",
     "Pull-ups": "Pull-ups",
     "Barbell Rows": "Barbell Rows",
     "Lat Pulldown": "Lat Pulldown",
     "Barbell Squat": "Barbell Squat",
     "Leg Press": "Leg Press",
     "Romanian Deadlift": "Romanian Deadlift",
-    "Lunges": "Lunges",
+    Lunges: "Lunges",
     "Calf Raises": "Calf Raises",
     "Overhead Press": "Overhead Press",
     "Lateral Raises": "Lateral Raises",
@@ -188,12 +190,12 @@ export const translations = {
     "Barbell Curls": "Barbell Curls",
     "Tricep Pushdowns": "Tricep Pushdowns",
     "Hammer Curls": "Hammer Curls",
-    "Skullcrushers": "Skullcrushers",
-    "Plank": "Plank",
+    Skullcrushers: "Skullcrushers",
+    Plank: "Plank",
     "Hanging Leg Raises": "Hanging Leg Raises",
-    "Burpees": "Burpees",
+    Burpees: "Burpees",
     "Mountain Climbers": "Mountain Climbers",
-    "Running": "Running",
+    Running: "Running",
     "Stairs Running": "Stairs Running",
     "Jump Rope": "Jump Rope",
     "Static Pull-up Hold": "Static Pull-up Hold",
@@ -366,9 +368,11 @@ export const translations = {
     all_submissions: "כל האימונים",
     manage_users: "ניהול משתמשים",
     delete_user_title: "מחיקת משתמש?",
-    delete_user_warning: "פעולה זו תמחק את המשתמש לצמיתות. לא ניתן לבטל פעולה זו.",
+    delete_user_warning:
+      "פעולה זו תמחק את המשתמש לצמיתות. לא ניתן לבטל פעולה זו.",
     delete_video_title: "מחיקת סרטון?",
-    delete_video_warning: "פעולה זו תמחק את הסרטון לצמיתות מהאחסון. לא ניתן לבטל פעולה זו.",
+    delete_video_warning:
+      "פעולה זו תמחק את הסרטון לצמיתות מהאחסון. לא ניתן לבטל פעולה זו.",
     delete_action: "מחק",
 
     // Categories
@@ -385,14 +389,14 @@ export const translations = {
     "Incline Dumbbell Press": "לחיצת חזה בשיפוע עם משקולות",
     "Cable Flyes": "פרפר בכבלים",
     "Push-ups": "שכיבות סמיכה",
-    "Deadlift": "דדליפט",
+    Deadlift: "דדליפט",
     "Pull-ups": "מתח",
     "Barbell Rows": "חתירה עם מוט",
     "Lat Pulldown": "פולי עליון",
     "Barbell Squat": "סקוואט עם מוט",
     "Leg Press": "לחיצת רגליים",
     "Romanian Deadlift": "דדליפט רומני",
-    "Lunges": "מכרעים",
+    Lunges: "מכרעים",
     "Calf Raises": "הרמות עקבים",
     "Overhead Press": "לחיצת כתפיים בעמידה",
     "Lateral Raises": "הרחקת כתפיים לצדדים",
@@ -400,12 +404,12 @@ export const translations = {
     "Barbell Curls": "כפיפת מרפקים עם מוט",
     "Tricep Pushdowns": "פשיטת מרפקים בכבל",
     "Hammer Curls": "כפיפת מרפקים פטישים",
-    "Skullcrushers": "לחיצה צרפתית",
-    "Plank": "פלאנק (בטן סטטית)",
+    Skullcrushers: "לחיצה צרפתית",
+    Plank: "פלאנק (בטן סטטית)",
     "Hanging Leg Raises": "הרמות רגליים בתלייה",
-    "Burpees": "סמוך-קום",
+    Burpees: "סמוך-קום",
     "Mountain Climbers": "טיפוס הרים",
-    "Running": "ריצה",
+    Running: "ריצה",
     "Stairs Running": "ריצת מדרגות",
     "Jump Rope": "קפיצה בחבל",
     "Static Pull-up Hold": "החזקת מתח סטטית",
@@ -424,5 +428,5 @@ export const translations = {
     push_new_submission_title: "הגשה חדשה",
     push_workout_reviewed_title: "האימון נבדק",
     push_new_message_title: "הודעה חדשה מהמאמן",
-  }
+  },
 };

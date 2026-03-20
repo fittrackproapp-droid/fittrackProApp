@@ -1,17 +1,17 @@
-import { CapacitorConfig } from '@capacitor/cli';
+import { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: 'com.fittrackpro.app',
-  appName: 'FitTrack Pro',
-  webDir: 'dist',
+  appId: "com.fittrackpro.app",
+  appName: "FitTrack Pro",
+  webDir: "dist",
   // Disable the built-in server on native — serve from bundled assets
   server: {
-    androidScheme: 'https',
+    androidScheme: "https",
   },
   plugins: {
     // Native push notifications
     PushNotifications: {
-      presentationOptions: ['badge', 'sound', 'alert'],
+      presentationOptions: ["badge", "sound", "alert"],
     },
     // Camera / video recording
     Camera: {
@@ -20,12 +20,12 @@ const config: CapacitorConfig = {
     // Splash screen (optional, remove if not needed)
     SplashScreen: {
       launchShowDuration: 2000,
-      backgroundColor: '#6366f1', // Indigo — match your app theme
+      backgroundColor: "#6366f1", // Indigo — match your app theme
       showSpinner: false,
     },
     GoogleAuth: {
-      scopes: ['profile', 'email'],
-      serverClientId: process.env.VITE_GOOGLE_CLIENT_ID || '',
+      scopes: ["profile", "email"],
+      serverClientId: process.env.VITE_GOOGLE_CLIENT_ID || "",
       forceCodeForRefreshToken: true,
     },
   },

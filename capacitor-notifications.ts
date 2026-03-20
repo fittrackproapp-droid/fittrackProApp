@@ -6,13 +6,13 @@
  * Messaging / service-worker flow is used instead (see firebase.ts).
  */
 
-import { Capacitor } from '@capacitor/core';
+import { Capacitor } from "@capacitor/core";
 import {
   PushNotifications,
   Token,
   ActionPerformed,
   PushNotificationSchema,
-} from '@capacitor/push-notifications';
+} from "@capacitor/push-notifications";
 
 export type NativePushToken = string;
 
@@ -33,8 +33,8 @@ export async function initNativePushNotifications(
 
   // 1. Request permission
   const permResult = await PushNotifications.requestPermissions();
-  if (permResult.receive !== 'granted') {
-    console.warn('[Push] Permission not granted');
+  if (permResult.receive !== "granted") {
+    console.warn("[Push] Permission not granted");
     return;
   }
 
@@ -42,22 +42,22 @@ export async function initNativePushNotifications(
   await PushNotifications.register();
 
   // 3. Listen for the FCM token
-  PushNotifications.addListener('registration', (token: Token) => {
-    console.log('[Push] FCM token:', token.value);
+  PushNotifications.addListener("registration", (token: Token) => {
+    console.log("[Push] FCM token:", token.value);
     onToken(token.value);
   });
 
   // 4. Registration errors
-  PushNotifications.addListener('registrationError', (err) => {
-    console.error('[Push] Registration error:', err.error);
+  PushNotifications.addListener("registrationError", (err) => {
+    console.error("[Push] Registration error:", err.error);
   });
 
   // 5. Foreground notifications
   if (onNotification) {
     PushNotifications.addListener(
-      'pushNotificationReceived',
+      "pushNotificationReceived",
       (notification: PushNotificationSchema) => {
-        console.log('[Push] Received:', notification);
+        console.log("[Push] Received:", notification);
         onNotification(notification);
       },
     );
@@ -66,9 +66,9 @@ export async function initNativePushNotifications(
   // 6. User tapped a notification
   if (onNotificationTap) {
     PushNotifications.addListener(
-      'pushNotificationActionPerformed',
+      "pushNotificationActionPerformed",
       (action: ActionPerformed) => {
-        console.log('[Push] Action performed:', action);
+        console.log("[Push] Action performed:", action);
         onNotificationTap(action);
       },
     );
