@@ -1,6 +1,17 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
 import {
-  Scissors, Play, Pause, Trash2, AlertTriangle, CheckCircle,
+  Scissors,
+  Play,
+  Pause,
+  Trash2,
+  AlertTriangle,
+  CheckCircle,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -11,7 +22,7 @@ interface SplitPoint {
 }
 
 interface ProcessingState {
-  segmentIndex: number;   // 0-based current segment
+  segmentIndex: number; // 0-based current segment
   totalSegments: number;
   segmentProgress: number; // 0–100 for this segment
   overallProgress: number; // 0–100 across all segments
@@ -40,10 +51,9 @@ async function trimSegment(
   endTime: number,
   onProgress?: (pct: number) => void,
 ): Promise<Blob> {
-  const mimeType =
-    MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
-      ? "video/webm;codecs=vp9,opus"
-      : MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
+  const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
+    ? "video/webm;codecs=vp9,opus"
+    : MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
       ? "video/webm;codecs=vp8,opus"
       : "video/webm";
 
@@ -57,7 +67,8 @@ async function trimSegment(
 
     await new Promise<void>((resolve, reject) => {
       video.onloadedmetadata = () => resolve();
-      video.onerror = () => reject(new Error("Could not load video for trimming."));
+      video.onerror = () =>
+        reject(new Error("Could not load video for trimming."));
     });
 
     // Scale canvas to max 1280 px wide while preserving aspect ratio
@@ -87,7 +98,9 @@ async function trimSegment(
       audioBitsPerSecond: 128_000,
     });
     const chunks: Blob[] = [];
-    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
 
     const clipDuration = endTime - startTime;
 
@@ -96,7 +109,8 @@ async function trimSegment(
         audioCtx.close();
         resolve(new Blob(chunks, { type: mimeType }));
       };
-      recorder.onerror = () => reject(new Error("MediaRecorder failed during trim."));
+      recorder.onerror = () =>
+        reject(new Error("MediaRecorder failed during trim."));
 
       // Seek then record
       video.currentTime = startTime;
@@ -112,7 +126,10 @@ async function trimSegment(
             return;
           }
           onProgress?.(
-            Math.min(100, ((video.currentTime - startTime) / clipDuration) * 100),
+            Math.min(
+              100,
+              ((video.currentTime - startTime) / clipDuration) * 100,
+            ),
           );
           ctx.drawImage(video, 0, 0, cw, ch);
           requestAnimationFrame(tick);
@@ -146,29 +163,38 @@ const VideoTrimmer: React.FC<VideoTrimmerProps> = ({
   onComplete,
   onCancel,
 }) => {
-  const videoRef    = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   // Keep a stable object URL for the lifetime of the component
-  const blobUrlRef  = useRef(URL.createObjectURL(blob));
+  const blobUrlRef = useRef(URL.createObjectURL(blob));
 
-  const [duration,    setDuration]    = useState(0);
+  const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
-  const [isPlaying,   setIsPlaying]   = useState(false);
-  const [trimStart,   setTrimStart]   = useState(0);
-  const [trimEnd,     setTrimEnd]     = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [trimStart, setTrimStart] = useState(0);
+  const [trimEnd, setTrimEnd] = useState(0);
   const [splitPoints, setSplitPoints] = useState<SplitPoint[]>([]);
-  const [processing,  setProcessing]  = useState<ProcessingState | null>(null);
-  const [done,        setDone]        = useState(false);
+  const [processing, setProcessing] = useState<ProcessingState | null>(null);
+  const [done, setDone] = useState(false);
 
   // Refs for drag handler (avoids stale closure issues)
   const trimStartRef = useRef(0);
-  const trimEndRef   = useRef(0);
-  const durationRef  = useRef(0);
-  const dragging     = useRef<{ type: "start" | "end" | "split"; id?: string } | null>(null);
+  const trimEndRef = useRef(0);
+  const durationRef = useRef(0);
+  const dragging = useRef<{
+    type: "start" | "end" | "split";
+    id?: string;
+  } | null>(null);
 
-  useEffect(() => { trimStartRef.current = trimStart; }, [trimStart]);
-  useEffect(() => { trimEndRef.current   = trimEnd;   }, [trimEnd]);
-  useEffect(() => { durationRef.current  = duration;  }, [duration]);
+  useEffect(() => {
+    trimStartRef.current = trimStart;
+  }, [trimStart]);
+  useEffect(() => {
+    trimEndRef.current = trimEnd;
+  }, [trimEnd]);
+  useEffect(() => {
+    durationRef.current = duration;
+  }, [duration]);
 
   // Revoke URL when component unmounts
   useEffect(() => {
@@ -182,23 +208,26 @@ const VideoTrimmer: React.FC<VideoTrimmerProps> = ({
     if (!video) return;
     video.src = blobUrlRef.current;
 
-    const onMeta  = () => { setDuration(video.duration); setTrimEnd(video.duration); };
-    const onTime  = () => setCurrentTime(video.currentTime);
-    const onPlay  = () => setIsPlaying(true);
+    const onMeta = () => {
+      setDuration(video.duration);
+      setTrimEnd(video.duration);
+    };
+    const onTime = () => setCurrentTime(video.currentTime);
+    const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
     const onEnded = () => setIsPlaying(false);
 
     video.addEventListener("loadedmetadata", onMeta);
-    video.addEventListener("timeupdate",     onTime);
-    video.addEventListener("play",           onPlay);
-    video.addEventListener("pause",          onPause);
-    video.addEventListener("ended",          onEnded);
+    video.addEventListener("timeupdate", onTime);
+    video.addEventListener("play", onPlay);
+    video.addEventListener("pause", onPause);
+    video.addEventListener("ended", onEnded);
     return () => {
       video.removeEventListener("loadedmetadata", onMeta);
-      video.removeEventListener("timeupdate",     onTime);
-      video.removeEventListener("play",           onPlay);
-      video.removeEventListener("pause",          onPause);
-      video.removeEventListener("ended",          onEnded);
+      video.removeEventListener("timeupdate", onTime);
+      video.removeEventListener("play", onPlay);
+      video.removeEventListener("pause", onPause);
+      video.removeEventListener("ended", onEnded);
     };
   }, []);
 
@@ -208,7 +237,13 @@ const VideoTrimmer: React.FC<VideoTrimmerProps> = ({
     const tl = timelineRef.current;
     if (!tl || !durationRef.current) return 0;
     const { left, width } = tl.getBoundingClientRect();
-    return Math.max(0, Math.min(durationRef.current, ((clientX - left) / width) * durationRef.current));
+    return Math.max(
+      0,
+      Math.min(
+        durationRef.current,
+        ((clientX - left) / width) * durationRef.current,
+      ),
+    );
   }, []);
 
   const timeToPercent = (t: number) =>
@@ -216,33 +251,44 @@ const VideoTrimmer: React.FC<VideoTrimmerProps> = ({
 
   // ── Global pointer handlers (handles drag outside the timeline rect) ────────
 
-  const onPointerMove = useCallback((e: PointerEvent) => {
-    if (!dragging.current) return;
-    const time = pxToTime(e.clientX);
-    if (dragging.current.type === "start") {
-      setTrimStart(Math.min(time, trimEndRef.current - 0.5));
-    } else if (dragging.current.type === "end") {
-      setTrimEnd(Math.max(time, trimStartRef.current + 0.5));
-    } else if (dragging.current.type === "split") {
-      const id = dragging.current.id;
-      setSplitPoints((pts) =>
-        pts.map((p) =>
-          p.id === id
-            ? { ...p, time: Math.max(trimStartRef.current + 0.5, Math.min(trimEndRef.current - 0.5, time)) }
-            : p,
-        ),
-      );
-    }
-  }, [pxToTime]);
+  const onPointerMove = useCallback(
+    (e: PointerEvent) => {
+      if (!dragging.current) return;
+      const time = pxToTime(e.clientX);
+      if (dragging.current.type === "start") {
+        setTrimStart(Math.min(time, trimEndRef.current - 0.5));
+      } else if (dragging.current.type === "end") {
+        setTrimEnd(Math.max(time, trimStartRef.current + 0.5));
+      } else if (dragging.current.type === "split") {
+        const id = dragging.current.id;
+        setSplitPoints((pts) =>
+          pts.map((p) =>
+            p.id === id
+              ? {
+                  ...p,
+                  time: Math.max(
+                    trimStartRef.current + 0.5,
+                    Math.min(trimEndRef.current - 0.5, time),
+                  ),
+                }
+              : p,
+          ),
+        );
+      }
+    },
+    [pxToTime],
+  );
 
-  const onPointerUp = useCallback(() => { dragging.current = null; }, []);
+  const onPointerUp = useCallback(() => {
+    dragging.current = null;
+  }, []);
 
   useEffect(() => {
     window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup",   onPointerUp);
+    window.addEventListener("pointerup", onPointerUp);
     return () => {
       window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup",   onPointerUp);
+      window.removeEventListener("pointerup", onPointerUp);
     };
   }, [onPointerMove, onPointerUp]);
 
@@ -251,7 +297,9 @@ const VideoTrimmer: React.FC<VideoTrimmerProps> = ({
   const segments = useMemo(() => {
     const sorted = [...splitPoints].sort((a, b) => a.time - b.time);
     const bounds = [trimStart, ...sorted.map((p) => p.time), trimEnd];
-    return bounds.slice(0, -1).map((start, i) => ({ start, end: bounds[i + 1], index: i }));
+    return bounds
+      .slice(0, -1)
+      .map((start, i) => ({ start, end: bounds[i + 1], index: i }));
   }, [trimStart, trimEnd, splitPoints]);
 
   const estimatedSize = (start: number, end: number) =>
@@ -265,7 +313,8 @@ const VideoTrimmer: React.FC<VideoTrimmerProps> = ({
     if (isPlaying) {
       v.pause();
     } else {
-      if (v.currentTime < trimStart || v.currentTime >= trimEnd) v.currentTime = trimStart;
+      if (v.currentTime < trimStart || v.currentTime >= trimEnd)
+        v.currentTime = trimStart;
       v.play();
     }
   };
@@ -303,7 +352,12 @@ const VideoTrimmer: React.FC<VideoTrimmerProps> = ({
 
   const processSegments = async () => {
     const total = segments.length;
-    setProcessing({ segmentIndex: 0, totalSegments: total, segmentProgress: 0, overallProgress: 0 });
+    setProcessing({
+      segmentIndex: 0,
+      totalSegments: total,
+      segmentProgress: 0,
+      overallProgress: 0,
+    });
 
     const results: TrimmedSegment[] = [];
     const baseName = fileName.replace(/\.[^.]+$/, "");
@@ -312,32 +366,37 @@ const VideoTrimmer: React.FC<VideoTrimmerProps> = ({
       const { start, end } = segments[i];
       const trimmed = await trimSegment(blob, start, end, (pct) => {
         setProcessing({
-          segmentIndex:   i,
-          totalSegments:  total,
+          segmentIndex: i,
+          totalSegments: total,
           segmentProgress: pct,
           overallProgress: ((i + pct / 100) / total) * 100,
         });
       });
       results.push({
         blob: trimmed,
-        name: total === 1
-          ? `${baseName} (trimmed)`
-          : `${baseName} – part ${i + 1}`,
+        name:
+          total === 1 ? `${baseName} (trimmed)` : `${baseName} – part ${i + 1}`,
       });
     }
 
-    setProcessing({ segmentIndex: total - 1, totalSegments: total, segmentProgress: 100, overallProgress: 100 });
+    setProcessing({
+      segmentIndex: total - 1,
+      totalSegments: total,
+      segmentProgress: 100,
+      overallProgress: 100,
+    });
     setDone(true);
     setTimeout(() => onComplete(results), 800);
   };
 
-  const anySegmentOver = segments.some((s) => estimatedSize(s.start, s.end) > SAFE_BYTES);
+  const anySegmentOver = segments.some(
+    (s) => estimatedSize(s.start, s.end) > SAFE_BYTES,
+  );
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col gap-4 max-w-2xl mx-auto">
-
       {/* Video preview */}
       <div className="bg-black rounded-xl overflow-hidden">
         <video
@@ -364,7 +423,11 @@ const VideoTrimmer: React.FC<VideoTrimmerProps> = ({
 
         <button
           onClick={addSplitAtCurrent}
-          disabled={!!processing || currentTime <= trimStart + 0.5 || currentTime >= trimEnd - 0.5}
+          disabled={
+            !!processing ||
+            currentTime <= trimStart + 0.5 ||
+            currentTime >= trimEnd - 0.5
+          }
           className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-200
             text-amber-700 rounded-lg text-xs font-bold hover:bg-amber-100 disabled:opacity-40 transition"
         >
@@ -388,8 +451,8 @@ const VideoTrimmer: React.FC<VideoTrimmerProps> = ({
               key={i}
               className="absolute top-0 h-full rounded opacity-25 pointer-events-none"
               style={{
-                left:       `${timeToPercent(seg.start)}%`,
-                width:      `${timeToPercent(seg.end) - timeToPercent(seg.start)}%`,
+                left: `${timeToPercent(seg.start)}%`,
+                width: `${timeToPercent(seg.end) - timeToPercent(seg.start)}%`,
                 background: SEGMENT_COLORS[i % SEGMENT_COLORS.length],
               }}
             />
@@ -415,7 +478,10 @@ const VideoTrimmer: React.FC<VideoTrimmerProps> = ({
           <div
             className="absolute top-0 h-full w-3 bg-green-500 rounded-l z-30
               flex items-center justify-center cursor-ew-resize hover:bg-green-400 transition-colors"
-            style={{ left: `${timeToPercent(trimStart)}%`, transform: "translateX(-100%)" }}
+            style={{
+              left: `${timeToPercent(trimStart)}%`,
+              transform: "translateX(-100%)",
+            }}
             onPointerDown={(e) => {
               e.preventDefault();
               if (processing) return;
@@ -447,7 +513,10 @@ const VideoTrimmer: React.FC<VideoTrimmerProps> = ({
               key={sp.id}
               className="absolute top-0 h-full w-2 bg-amber-400 z-30 cursor-ew-resize
                 hover:bg-amber-300 transition-colors"
-              style={{ left: `${timeToPercent(sp.time)}%`, transform: "translateX(-50%)" }}
+              style={{
+                left: `${timeToPercent(sp.time)}%`,
+                transform: "translateX(-50%)",
+              }}
               onPointerDown={(e) => {
                 e.preventDefault();
                 if (processing) return;
@@ -467,9 +536,18 @@ const VideoTrimmer: React.FC<VideoTrimmerProps> = ({
 
         {/* Legend */}
         <div className="flex items-center gap-4 text-[10px] text-gray-400 px-1">
-          <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-green-500"/>&nbsp;trim start</span>
-          <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-400"/>&nbsp;split point</span>
-          <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-500"/>&nbsp;trim end</span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-green-500" />
+            &nbsp;trim start
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-400" />
+            &nbsp;split point
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-500" />
+            &nbsp;trim end
+          </span>
         </div>
       </div>
 
@@ -490,8 +568,8 @@ const VideoTrimmer: React.FC<VideoTrimmerProps> = ({
         </div>
 
         {segments.map((seg, i) => {
-          const size  = estimatedSize(seg.start, seg.end);
-          const over  = size > SAFE_BYTES;
+          const size = estimatedSize(seg.start, seg.end);
+          const over = size > SAFE_BYTES;
           // The split point that ends this segment (if any)
           const sorted = [...splitPoints].sort((a, b) => a.time - b.time);
           const boundaryPoint = i < sorted.length ? sorted[i] : null;
@@ -504,11 +582,15 @@ const VideoTrimmer: React.FC<VideoTrimmerProps> = ({
             >
               <div
                 className="w-2.5 h-9 rounded-sm shrink-0"
-                style={{ background: SEGMENT_COLORS[i % SEGMENT_COLORS.length] }}
+                style={{
+                  background: SEGMENT_COLORS[i % SEGMENT_COLORS.length],
+                }}
               />
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-gray-900 text-sm truncate">
-                  {segments.length === 1 ? (fileName.replace(/\.[^.]+$/, "") + " (trimmed)") : `Part ${i + 1}`}
+                  {segments.length === 1
+                    ? fileName.replace(/\.[^.]+$/, "") + " (trimmed)"
+                    : `Part ${i + 1}`}
                 </p>
                 <p className="text-[11px] text-gray-500 tabular-nums">
                   {fmt(seg.start)} → {fmt(seg.end)}
@@ -537,7 +619,8 @@ const VideoTrimmer: React.FC<VideoTrimmerProps> = ({
         {anySegmentOver && (
           <p className="text-xs text-red-600 flex items-center gap-1.5 px-1">
             <AlertTriangle size={11} />
-            At least one clip may exceed 100 MB. Add more split points to reduce it.
+            At least one clip may exceed 100 MB. Add more split points to reduce
+            it.
           </p>
         )}
       </div>
@@ -551,10 +634,13 @@ const VideoTrimmer: React.FC<VideoTrimmerProps> = ({
                 ? "Done!"
                 : `Processing clip ${processing.segmentIndex + 1} of ${processing.totalSegments}…`}
             </span>
-            {done
-              ? <CheckCircle size={18} className="text-green-500" />
-              : <span className="text-xs tabular-nums text-indigo-400">{Math.round(processing.overallProgress)}%</span>
-            }
+            {done ? (
+              <CheckCircle size={18} className="text-green-500" />
+            ) : (
+              <span className="text-xs tabular-nums text-indigo-400">
+                {Math.round(processing.overallProgress)}%
+              </span>
+            )}
           </div>
 
           {/* Overall bar */}
@@ -611,7 +697,9 @@ const VideoTrimmer: React.FC<VideoTrimmerProps> = ({
               transition shadow-lg shadow-indigo-200 flex items-center justify-center gap-2"
           >
             <Scissors size={15} />
-            {segments.length === 1 ? "Trim & add" : `Process ${segments.length} clips`}
+            {segments.length === 1
+              ? "Trim & add"
+              : `Process ${segments.length} clips`}
           </button>
         </div>
       )}

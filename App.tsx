@@ -9,7 +9,6 @@ import {
 } from "./types";
 import { db, saveVideo, getVideo, tryCompressBlob } from "./services/db";
 import VideoRecorder from "./components/VideoRecorder";
-import VideoTrimmer, { TrimmedSegment } from "./components/VideoTrimmer";
 import WorkoutCalendar from "./components/WorkoutCalendar";
 import InboxView from "./components/InboxView";
 import { messaging, VAPID_KEY, dbFirestore, auth } from "./services/firebase";
@@ -21,6 +20,7 @@ import {
   Language,
   TranslationKey,
 } from "./services/translations";
+import { autoSplitIfNeeded, SplitProgress } from "./services/videoUtils";
 import {
   initNativePushNotifications,
   cleanupNativePushNotifications,
@@ -633,6 +633,7 @@ const App = () => {
   );
   const [loadingData, setLoadingData] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [splitPhase, setSplitPhase] = useState<SplitProgress | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0); // 0-100 overall
   const [uploadFileIndex, setUploadFileIndex] = useState(0); // 1-based index of current file
   const [uploadFileCount, setUploadFileCount] = useState(0); // total new (non-existing) files
@@ -674,11 +675,6 @@ const App = () => {
   // Trainee specific
   const [recordingExercises, setRecordingExercises] = useState<string[]>([]);
 
-  const [trimmerTarget, setTrimmerTarget] = useState<{
-    id: string; // ID of the media item being edited
-    blob: Blob;
-    name: string;
-  } | null>(null);
   // Added isExisting flag to track if video is already on server (for editing)
   const [sessionMedia, setSessionMedia] = useState<
     {
@@ -1233,7 +1229,7 @@ const App = () => {
     setView("SESSION_HUB");
     setLoadingData(true);
     try {
-      const blobToUse = await tryCompressBlob(blob);
+      const blobToUse = blob;
       const id = crypto.randomUUID();
       const preview = URL.createObjectURL(blobToUse);
       const item = {
@@ -1245,10 +1241,6 @@ const App = () => {
         isExisting: false,
       };
       setSessionMedia((prev) => [...prev, item]);
-
-      if (blobToUse.size > 80 * 1024 * 1024) {
-        setTrimmerTarget({ id, blob: blobToUse, name: item.name });
-      }
     } catch (err) {
       console.error("Failed to process recorded video:", err);
       alert("Failed to process video. Please try recording again.");
@@ -1263,7 +1255,7 @@ const App = () => {
 
     setLoadingData(true);
     try {
-      const blob = await tryCompressBlob(file);
+      const blob = file;
       const id = crypto.randomUUID();
       const preview = URL.createObjectURL(blob);
       const item = {
@@ -1275,40 +1267,12 @@ const App = () => {
         isExisting: false,
       };
       setSessionMedia((prev) => [...prev, item]);
-
-      // Auto-open trimmer if the file is likely too large for Cloudinary
-      if (blob.size > 80 * 1024 * 1024) {
-        setTrimmerTarget({ id, blob, name: file.name });
-      }
     } catch (err) {
       console.error("Failed to process video:", err);
       alert("Failed to process video. Please try a different file.");
     } finally {
       setLoadingData(false);
     }
-  };
-
-  const handleOpenTrimmer = (mediaId: string) => {
-    const item = sessionMedia.find((m) => m.id === mediaId);
-    if (!item) return;
-    setTrimmerTarget({ id: mediaId, blob: item.file, name: item.name });
-  };
-
-  const handleTrimmerComplete = (segments: TrimmedSegment[]) => {
-    if (!trimmerTarget) return;
-    const newItems = segments.map((seg) => ({
-      id: crypto.randomUUID(),
-      file: seg.blob,
-      type: "video" as const,
-      preview: URL.createObjectURL(seg.blob),
-      name: seg.name,
-      isExisting: false,
-    }));
-    // Replace the original item with the processed segments
-    setSessionMedia((prev) =>
-      prev.flatMap((m) => (m.id === trimmerTarget.id ? newItems : [m])),
-    );
-    setTrimmerTarget(null);
   };
 
   const handleRemoveMedia = (id: string) => {
@@ -1318,51 +1282,108 @@ const App = () => {
   const handleFinishWorkout = async () => {
     if (!user) return;
     setLoadingData(true);
-    setIsUploading(true);
+    setIsUploading(false);
+    setSplitPhase(null);
     setUploadProgress(0);
     setUploadFileIndex(0);
     setUploadFileCount(0);
     setUploadFileProgress(0);
     setUploadFileName("");
     progressMap.current = {};
+
     try {
       const plan = await db.getPlan(user.id);
 
-      // Count only files that actually need uploading (not already on the server)
-      const newFiles = sessionMedia.filter((m) => !m.isExisting);
-      const totalNew = newFiles.length;
-      setUploadFileCount(totalNew);
-      if (totalNew === 0) setUploadProgress(100);
+      // ── Phase 1: Auto-split large videos ──────────────────────────────────
+      // For each new (non-existing) media item that exceeds 82 MB, we
+      // re-encode it into smaller segments before uploading.
+      // Results are stored in parallel with sessionMedia so order is preserved.
 
-      // Upload sequentially — gives clean per-file progress rather than
-      // a confusing average of parallel uploads mid-chunk.
-      let newFilesDone = 0;
-      const savedVideoIds: string[] = [];
+      interface UploadEntry {
+        blob: Blob;
+        name: string;
+      }
+
+      // null  → existing video (use media.id directly)
+      // array → one or more blobs to upload for this item
+      const uploadEntriesPerItem: (UploadEntry[] | null)[] = [];
+      const newMediaItems = sessionMedia.filter((m) => !m.isExisting);
+      let newFilesSeen = 0;
 
       for (const media of sessionMedia) {
         if (media.isExisting) {
+          uploadEntriesPerItem.push(null);
+          continue;
+        }
+
+        const fileIndex = newFilesSeen;
+        newFilesSeen++;
+
+        const blobs = await autoSplitIfNeeded(
+          media.file,
+          fileIndex,
+          newMediaItems.length,
+          (p) => setSplitPhase(p),
+        );
+
+        uploadEntriesPerItem.push(
+          blobs.map((b, idx) => ({
+            blob: b,
+            name:
+              blobs.length > 1
+                ? `${media.name} (part ${idx + 1} of ${blobs.length})`
+                : media.name,
+          })),
+        );
+      }
+
+      setSplitPhase(null);
+
+      // ── Phase 2: Upload all blobs ─────────────────────────────────────────
+      const allEntries = uploadEntriesPerItem
+        .filter((e): e is UploadEntry[] => e !== null)
+        .flat();
+      const totalNew = allEntries.length;
+
+      setIsUploading(true);
+      setUploadFileCount(totalNew);
+      if (totalNew === 0) setUploadProgress(100);
+
+      let newFilesDone = 0;
+      const savedVideoIds: string[] = [];
+
+      for (let i = 0; i < sessionMedia.length; i++) {
+        const media = sessionMedia[i];
+        const entries = uploadEntriesPerItem[i];
+
+        if (entries === null) {
+          // Already-existing video — keep its ID
           savedVideoIds.push(media.id);
           continue;
         }
 
-        newFilesDone += 1;
-        setUploadFileIndex(newFilesDone);
-        setUploadFileName(media.name);
-        setUploadFileProgress(0);
+        for (const entry of entries) {
+          newFilesDone += 1;
+          setUploadFileIndex(newFilesDone);
+          setUploadFileName(entry.name);
+          setUploadFileProgress(0);
 
-        const vid = await saveVideo(media.file, (filePct) => {
-          setUploadFileProgress(filePct);
-          // Overall: completed files + fractional progress of current file
-          const overall = ((newFilesDone - 1 + filePct / 100) / totalNew) * 100;
-          setUploadProgress(overall);
-        });
+          const vid = await saveVideo(entry.blob, (filePct) => {
+            setUploadFileProgress(filePct);
+            const overall =
+              ((newFilesDone - 1 + filePct / 100) / totalNew) * 100;
+            setUploadProgress(overall);
+          });
 
-        savedVideoIds.push(vid);
-        setUploadFileProgress(100);
-        setUploadProgress((newFilesDone / totalNew) * 100);
+          savedVideoIds.push(vid);
+          setUploadFileProgress(100);
+          setUploadProgress((newFilesDone / totalNew) * 100);
+        }
       }
 
       setUploadProgress(100);
+
+      // ── Phase 3: Save submission ──────────────────────────────────────────
       const subId = editingSubmissionId || crypto.randomUUID();
       const sub: Submission = {
         id: subId,
@@ -1370,17 +1391,15 @@ const App = () => {
         traineeId: user.id,
         exerciseIds: recordingExercises,
         videoIds: savedVideoIds,
-        timestamp: editingSubmissionId ? Date.now() : Date.now(),
+        timestamp: Date.now(),
         status: "PENDING",
         feedback: "",
         traineeNote: traineeNote,
         videosDeleted: false,
       };
-      if (editingSubmissionId) {
-        await db.saveSubmission(sub);
-      } else {
-        await db.saveSubmission(sub);
-      }
+
+      await db.saveSubmission(sub);
+
       if (user.coachId) {
         const exerciseNames = exercises
           .filter((e) => recordingExercises.includes(e.id))
@@ -1394,6 +1413,7 @@ const App = () => {
           `${user.name}: ${exerciseNames}`,
         );
       }
+
       await refreshData();
       setView("DASHBOARD");
       setRecordingExercises([]);
@@ -1407,6 +1427,7 @@ const App = () => {
       setLoadingData(false);
       setUploadProgress(0);
       setIsUploading(false);
+      setSplitPhase(null);
     }
   };
 
@@ -1845,7 +1866,119 @@ const App = () => {
       {loadingData && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center space-y-5 animate-in fade-in zoom-in duration-300">
-            {isUploading ? (
+            {splitPhase !== null ? (
+              /* ── Auto-split progress ── */
+              <div className="flex flex-col items-center justify-center py-2 space-y-4">
+                <div className="relative w-24 h-24 flex items-center justify-center">
+                  <svg
+                    className="w-full h-full -rotate-90"
+                    viewBox="0 0 100 100"
+                  >
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="42"
+                      fill="transparent"
+                      stroke="currentColor"
+                      strokeWidth="7"
+                      className="text-gray-100"
+                    />
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="42"
+                      fill="transparent"
+                      stroke="currentColor"
+                      strokeWidth="7"
+                      strokeLinecap="round"
+                      className="text-amber-500 transition-all duration-300 ease-out"
+                      strokeDasharray="263.9"
+                      strokeDashoffset={
+                        263.9 -
+                        (263.9 * Math.min(splitPhase.overallProgress, 100)) /
+                          100
+                      }
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Scissors
+                      size={28}
+                      className="text-amber-500 animate-pulse"
+                    />
+                  </div>
+                </div>
+
+                <div className="text-center">
+                  <h3 className="text-lg font-bold text-gray-900">
+                    {splitPhase.totalFiles > 1
+                      ? t("preparing_videos")
+                      : t("preparing_video")}
+                  </h3>
+
+                  {splitPhase.phase === "measuring" ? (
+                    <p className="text-sm text-gray-500 mt-1">
+                      {t("measuring_video")}
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {splitPhase.totalFiles > 1 &&
+                          `${t("file_label")} ${splitPhase.fileIndex + 1}/${splitPhase.totalFiles} · `}
+                        {t("clip_label")} {splitPhase.segmentIndex + 1}{" "}
+                        {t("splitting_of")} {splitPhase.totalSegments}
+                      </p>
+
+                      <div className="w-56 mt-3 space-y-1.5 text-left">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-gray-400">
+                            {t("clip_label")} {splitPhase.segmentIndex + 1}/
+                            {splitPhase.totalSegments}
+                          </span>
+                          <span className="text-xs font-bold text-amber-600 tabular-nums">
+                            {Math.round(splitPhase.segmentProgress)}%
+                          </span>
+                        </div>
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-amber-500 rounded-full transition-all duration-200 ease-out"
+                            style={{
+                              width: `${Math.min(splitPhase.segmentProgress, 100)}%`,
+                            }}
+                          />
+                        </div>
+
+                        {splitPhase.totalSegments > 1 && (
+                          <>
+                            <div className="flex justify-between items-center pt-1">
+                              <span className="text-xs text-gray-400">
+                                {t("overall_label")}
+                              </span>
+                              <span className="text-xs text-gray-400 tabular-nums">
+                                {Math.round(splitPhase.overallProgress)}%
+                              </span>
+                            </div>
+                            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-amber-300 rounded-full transition-all duration-300 ease-out"
+                                style={{
+                                  width: `${Math.min(splitPhase.overallProgress, 100)}%`,
+                                }}
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  <p className="text-xs text-gray-400 mt-3">
+                    {t("splitting_realtime_note")}
+                    {splitPhase.totalSegments > 1 &&
+                      ` (${splitPhase.totalSegments} ${t("splitting_clips")})`}
+                  </p>
+                </div>
+              </div>
+            ) : isUploading ? (
               <>
                 {/* ── overall progress ring ── */}
                 <div className="relative w-24 h-24 mx-auto flex items-center justify-center">
@@ -2765,13 +2898,6 @@ const App = () => {
                             <Play size={16} />
                           </button>
                           <button
-                            onClick={() => handleOpenTrimmer(media.id)}
-                            className="p-1.5 bg-amber-50 hover:bg-amber-100 rounded-lg text-amber-600 transition"
-                            title="Trim or split this video"
-                          >
-                            <Scissors size={16} />
-                          </button>
-                          <button
                             onClick={() => handleRemoveMedia(media.id)}
                             className="p-1.5 bg-red-50 hover:bg-red-100 rounded-lg text-red-500 transition"
                           >
@@ -2851,55 +2977,6 @@ const App = () => {
                 error: t("camera_error"),
               }}
             />
-          </div>
-        )}
-
-        {trimmerTarget && (
-          <div className="fixed inset-0 z-40 bg-white overflow-y-auto">
-            <div className="max-w-2xl mx-auto p-4 space-y-4">
-              {/* Header */}
-              <div className="flex items-center gap-3 py-2">
-                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
-                  <Scissors size={16} />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-gray-900">
-                    Edit video
-                  </h2>
-                  <p className="text-xs text-gray-500 truncate max-w-xs">
-                    {trimmerTarget.name}
-                  </p>
-                </div>
-              </div>
-
-              {/* Size warning if applicable */}
-              {trimmerTarget.blob.size > 80 * 1024 * 1024 && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
-                  <AlertTriangle
-                    size={16}
-                    className="text-amber-600 shrink-0 mt-0.5"
-                  />
-                  <div>
-                    <p className="text-sm font-bold text-amber-800">
-                      Video is too large to upload
-                    </p>
-                    <p className="text-xs text-amber-700 mt-0.5">
-                      This video is ~
-                      {(trimmerTarget.blob.size / 1024 / 1024).toFixed(0)} MB.
-                      Trim it shorter or split it into smaller clips — each must
-                      be under 100 MB.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <VideoTrimmer
-                blob={trimmerTarget.blob}
-                fileName={trimmerTarget.name}
-                onComplete={handleTrimmerComplete}
-                onCancel={() => setTrimmerTarget(null)}
-              />
-            </div>
           </div>
         )}
 

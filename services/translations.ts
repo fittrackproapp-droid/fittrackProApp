@@ -138,6 +138,16 @@ export const translations = {
       "No videos yet. Record or upload a video to finish the workout.",
     videos_count: "Videos",
     add_notes: "Add notes for coach (optional)...",
+    preparing_video: "Preparing video…",
+    preparing_videos: "Preparing videos…",
+    measuring_video: "Measuring video length…",
+    clip_label: "Clip",
+    splitting_of: "of",
+    file_label: "File",
+    splitting_realtime_note:
+      "Large video is being split automatically — this runs in real-time",
+    splitting_clips: "clips",
+    overall_label: "Overall",
 
     // Calendar
     calendar: "Calendar",
@@ -350,6 +360,16 @@ export const translations = {
     no_media_yet: "אין סרטונים עדיין. הקלט או העלה וידאו כדי לסיים את האימון.",
     videos_count: "סרטונים",
     add_notes: "הוסף הערות למאמן (אופציונלי)...",
+    preparing_video: "מכין סרטון…",
+    preparing_videos: "מכין סרטונים…",
+    measuring_video: "מודד אורך סרטון…",
+    clip_label: "קטע",
+    splitting_of: "מתוך",
+    file_label: "קובץ",
+    splitting_realtime_note:
+      "הסרטון הגדול מחולק אוטומטית — פעולה זו מתבצעת בזמן אמת",
+    splitting_clips: "קטעים",
+    overall_label: "סה״כ",
 
     // Calendar
     calendar: "לוח שנה",

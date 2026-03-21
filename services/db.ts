@@ -609,10 +609,11 @@ export const saveVideo = async (
       );
     }
 
-    // Optionally compress very large files before chunking
-    const blobToUpload = await tryCompressBlob(blob);
-
-    return await saveToCloudinaryChunked(blobToUpload, onProgress);
+    // Send the original blob directly — chunked upload handles any size
+    // without re-encoding. tryCompressBlob is intentionally skipped:
+    // for a 700 MB video it would silently re-encode in real-time (~5 min)
+    // with zero progress feedback.
+    return await saveToCloudinaryChunked(blob, onProgress);
   }
 
   // ── FIREBASE (legacy) ─────────────────────────────────────────────────────

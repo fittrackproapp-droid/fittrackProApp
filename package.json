@@ -21,6 +21,7 @@
     "@google/genai": "*",
     "firebase": "^10.8.0",
     "firebase-admin": "^13.6.1",
+    "fix-webm-duration": "^1.0.6",
     "lucide-react": "^0.344.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
