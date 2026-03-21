@@ -9,6 +9,7 @@ import {
 } from "./types";
 import { db, saveVideo, getVideo, tryCompressBlob } from "./services/db";
 import VideoRecorder from "./components/VideoRecorder";
+import VideoTrimmer, { TrimmedSegment } from "./components/VideoTrimmer";
 import WorkoutCalendar from "./components/WorkoutCalendar";
 import InboxView from "./components/InboxView";
 import { messaging, VAPID_KEY, dbFirestore, auth } from "./services/firebase";
@@ -60,6 +61,7 @@ import {
   HeartPulse,
   Bell,
   BellOff,
+  Scissors,
 } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 
@@ -630,8 +632,12 @@ const App = () => {
     {},
   );
   const [loadingData, setLoadingData] = useState(false);
-  const [isUploading, setIsUploading] = useState(false); // Track specifically if uploading video
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0); // 0-100 overall
+  const [uploadFileIndex, setUploadFileIndex] = useState(0); // 1-based index of current file
+  const [uploadFileCount, setUploadFileCount] = useState(0); // total new (non-existing) files
+  const [uploadFileProgress, setUploadFileProgress] = useState(0); // 0-100 for current file
+  const [uploadFileName, setUploadFileName] = useState(""); // display name of current file
 
   // Data State
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -667,6 +673,12 @@ const App = () => {
 
   // Trainee specific
   const [recordingExercises, setRecordingExercises] = useState<string[]>([]);
+
+  const [trimmerTarget, setTrimmerTarget] = useState<{
+    id: string; // ID of the media item being edited
+    blob: Blob;
+    name: string;
+  } | null>(null);
   // Added isExisting flag to track if video is already on server (for editing)
   const [sessionMedia, setSessionMedia] = useState<
     {
@@ -1222,18 +1234,21 @@ const App = () => {
     setLoadingData(true);
     try {
       const blobToUse = await tryCompressBlob(blob);
+      const id = crypto.randomUUID();
       const preview = URL.createObjectURL(blobToUse);
-      setSessionMedia((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          file: blobToUse,
-          type: "video",
-          preview,
-          name: `Recorded Video ${prev.length + 1}`,
-          isExisting: false,
-        },
-      ]);
+      const item = {
+        id,
+        file: blobToUse,
+        type: "video" as const,
+        preview,
+        name: `Recorded Video ${sessionMedia.filter((m) => !m.isExisting).length + 1}`,
+        isExisting: false,
+      };
+      setSessionMedia((prev) => [...prev, item]);
+
+      if (blobToUse.size > 80 * 1024 * 1024) {
+        setTrimmerTarget({ id, blob: blobToUse, name: item.name });
+      }
     } catch (err) {
       console.error("Failed to process recorded video:", err);
       alert("Failed to process video. Please try recording again.");
@@ -1244,38 +1259,58 @@ const App = () => {
   const handleUploadVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0]) return;
     const file = e.target.files[0];
+    e.target.value = "";
 
-    // Hard reject anything over 500 MB before even trying
-    if (file.size > 500 * 1024 * 1024) {
-      alert("Video is too large (over 500 MB). Please trim it first.");
-      return;
-    }
-
-    // Show loading while compressing
     setLoadingData(true);
     try {
-      const blobToUse = await tryCompressBlob(file);
-      const preview = URL.createObjectURL(blobToUse);
-      setSessionMedia((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          file: blobToUse,
-          type: "video",
-          preview,
-          name: file.name,
-          isExisting: false,
-        },
-      ]);
+      const blob = await tryCompressBlob(file);
+      const id = crypto.randomUUID();
+      const preview = URL.createObjectURL(blob);
+      const item = {
+        id,
+        file: blob,
+        type: "video" as const,
+        preview,
+        name: file.name,
+        isExisting: false,
+      };
+      setSessionMedia((prev) => [...prev, item]);
+
+      // Auto-open trimmer if the file is likely too large for Cloudinary
+      if (blob.size > 80 * 1024 * 1024) {
+        setTrimmerTarget({ id, blob, name: file.name });
+      }
     } catch (err) {
       console.error("Failed to process video:", err);
       alert("Failed to process video. Please try a different file.");
     } finally {
       setLoadingData(false);
-      // Reset input so same file can be re-selected if needed
-      e.target.value = "";
     }
   };
+
+  const handleOpenTrimmer = (mediaId: string) => {
+    const item = sessionMedia.find((m) => m.id === mediaId);
+    if (!item) return;
+    setTrimmerTarget({ id: mediaId, blob: item.file, name: item.name });
+  };
+
+  const handleTrimmerComplete = (segments: TrimmedSegment[]) => {
+    if (!trimmerTarget) return;
+    const newItems = segments.map((seg) => ({
+      id: crypto.randomUUID(),
+      file: seg.blob,
+      type: "video" as const,
+      preview: URL.createObjectURL(seg.blob),
+      name: seg.name,
+      isExisting: false,
+    }));
+    // Replace the original item with the processed segments
+    setSessionMedia((prev) =>
+      prev.flatMap((m) => (m.id === trimmerTarget.id ? newItems : [m])),
+    );
+    setTrimmerTarget(null);
+  };
+
   const handleRemoveMedia = (id: string) => {
     setRemoveMediaConfirm(id);
   };
@@ -1285,28 +1320,48 @@ const App = () => {
     setLoadingData(true);
     setIsUploading(true);
     setUploadProgress(0);
+    setUploadFileIndex(0);
+    setUploadFileCount(0);
+    setUploadFileProgress(0);
+    setUploadFileName("");
     progressMap.current = {};
     try {
       const plan = await db.getPlan(user.id);
-      const newFiles = sessionMedia.filter((m) => !m.isExisting);
-      const totalFiles = newFiles.length;
-      if (totalFiles === 0) setUploadProgress(100);
-      else setUploadProgress(0);
 
-      const videoProcessingPromises = sessionMedia.map(async (media) => {
+      // Count only files that actually need uploading (not already on the server)
+      const newFiles = sessionMedia.filter((m) => !m.isExisting);
+      const totalNew = newFiles.length;
+      setUploadFileCount(totalNew);
+      if (totalNew === 0) setUploadProgress(100);
+
+      // Upload sequentially — gives clean per-file progress rather than
+      // a confusing average of parallel uploads mid-chunk.
+      let newFilesDone = 0;
+      const savedVideoIds: string[] = [];
+
+      for (const media of sessionMedia) {
         if (media.isExisting) {
-          return media.id;
-        } else {
-          return await saveVideo(media.file, (percent) => {
-            progressMap.current[media.id] = percent;
-            const values = Object.values(progressMap.current) as number[];
-            const sum = values.reduce((a, b) => a + b, 0);
-            const avg = totalFiles > 0 ? sum / totalFiles : 100;
-            setUploadProgress(avg);
-          });
+          savedVideoIds.push(media.id);
+          continue;
         }
-      });
-      const savedVideoIds = await Promise.all(videoProcessingPromises);
+
+        newFilesDone += 1;
+        setUploadFileIndex(newFilesDone);
+        setUploadFileName(media.name);
+        setUploadFileProgress(0);
+
+        const vid = await saveVideo(media.file, (filePct) => {
+          setUploadFileProgress(filePct);
+          // Overall: completed files + fractional progress of current file
+          const overall = ((newFilesDone - 1 + filePct / 100) / totalNew) * 100;
+          setUploadProgress(overall);
+        });
+
+        savedVideoIds.push(vid);
+        setUploadFileProgress(100);
+        setUploadProgress((newFilesDone / totalNew) * 100);
+      }
+
       setUploadProgress(100);
       const subId = editingSubmissionId || crypto.randomUUID();
       const sub: Submission = {
@@ -1789,62 +1844,121 @@ const App = () => {
 
       {loadingData && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center space-y-6 animate-in fade-in zoom-in duration-300">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center space-y-5 animate-in fade-in zoom-in duration-300">
             {isUploading ? (
               <>
-                <div className="relative w-20 h-20 mx-auto flex items-center justify-center">
+                {/* ── overall progress ring ── */}
+                <div className="relative w-24 h-24 mx-auto flex items-center justify-center">
                   <svg
-                    className="w-full h-full transform -rotate-90"
+                    className="w-full h-full -rotate-90"
                     viewBox="0 0 100 100"
                   >
+                    {/* track */}
                     <circle
+                      cx="50"
+                      cy="50"
+                      r="42"
+                      fill="transparent"
+                      stroke="currentColor"
+                      strokeWidth="7"
                       className="text-gray-100"
-                      stroke="currentColor"
-                      strokeWidth="8"
-                      fill="transparent"
-                      r="40"
-                      cx="50"
-                      cy="50"
                     />
+                    {/* fill — animates as uploadProgress changes */}
                     <circle
-                      className="text-indigo-600 transition-all duration-300 ease-out"
-                      stroke="currentColor"
-                      strokeWidth="8"
-                      strokeLinecap="round"
-                      fill="transparent"
-                      r="40"
                       cx="50"
                       cy="50"
-                      strokeDasharray="251.2"
-                      strokeDashoffset={251.2 - (251.2 * uploadProgress) / 100}
+                      r="42"
+                      fill="transparent"
+                      stroke="currentColor"
+                      strokeWidth="7"
+                      strokeLinecap="round"
+                      className="text-indigo-500 transition-all duration-300 ease-out"
+                      strokeDasharray="263.9"
+                      strokeDashoffset={
+                        263.9 - (263.9 * Math.min(uploadProgress, 100)) / 100
+                      }
                     />
                   </svg>
-                  <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-indigo-900">
-                    {uploadProgress < 100 ? (
-                      `${Math.round(uploadProgress)}%`
-                    ) : (
+                  {/* centre label */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    {uploadProgress >= 100 ? (
                       <CheckCircle
-                        size={32}
+                        size={34}
                         className="text-green-500 animate-in zoom-in duration-300"
                       />
+                    ) : (
+                      <span className="text-lg font-bold text-indigo-700 tabular-nums">
+                        {Math.round(uploadProgress)}%
+                      </span>
                     )}
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <h3 className="font-bold text-gray-900 text-xl">
-                    {uploadProgress < 100
-                      ? t("uploading_videos")
-                      : t("finishing_up")}
+                {/* ── title & file counter ── */}
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">
+                    {uploadProgress >= 100
+                      ? t("finishing_up")
+                      : t("uploading_videos")}
                   </h3>
-                  <p className="text-sm text-gray-500">
-                    {uploadProgress < 100
-                      ? t("please_wait")
-                      : t("finishing_up")}
-                  </p>
+                  {uploadFileCount > 0 && uploadProgress < 100 && (
+                    <p className="text-xs text-gray-400 mt-1 tabular-nums">
+                      {t("video_label")} {uploadFileIndex} / {uploadFileCount}
+                    </p>
+                  )}
                 </div>
+
+                {/* ── per-file + overall bars ── */}
+                {uploadFileCount > 0 && uploadProgress < 100 && (
+                  <div className="space-y-1.5 text-left">
+                    {/* current file */}
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500 truncate max-w-[190px]">
+                        {uploadFileName ||
+                          `${t("video_label")} ${uploadFileIndex}`}
+                      </span>
+                      <span className="text-xs font-bold text-indigo-600 tabular-nums ml-2 shrink-0">
+                        {Math.round(uploadFileProgress)}%
+                      </span>
+                    </div>
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-indigo-500 rounded-full transition-all duration-200 ease-out"
+                        style={{
+                          width: `${Math.min(uploadFileProgress, 100)}%`,
+                        }}
+                      />
+                    </div>
+
+                    {/* overall — only shown when more than 1 file */}
+                    {uploadFileCount > 1 && (
+                      <>
+                        <div className="flex justify-between items-center pt-1.5">
+                          <span className="text-xs text-gray-400">Overall</span>
+                          <span className="text-xs text-gray-400 tabular-nums">
+                            {Math.round(uploadProgress)}%
+                          </span>
+                        </div>
+                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-indigo-300 rounded-full transition-all duration-300 ease-out"
+                            style={{
+                              width: `${Math.min(uploadProgress, 100)}%`,
+                            }}
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* finishing state */}
+                {uploadProgress >= 100 && (
+                  <p className="text-sm text-gray-400">{t("please_wait")}</p>
+                )}
               </>
             ) : (
+              /* ── non-upload loading spinner ── */
               <div className="flex flex-col items-center justify-center py-2">
                 <Loader2
                   className="animate-spin text-indigo-600 mb-4"
@@ -2651,6 +2765,13 @@ const App = () => {
                             <Play size={16} />
                           </button>
                           <button
+                            onClick={() => handleOpenTrimmer(media.id)}
+                            className="p-1.5 bg-amber-50 hover:bg-amber-100 rounded-lg text-amber-600 transition"
+                            title="Trim or split this video"
+                          >
+                            <Scissors size={16} />
+                          </button>
+                          <button
                             onClick={() => handleRemoveMedia(media.id)}
                             className="p-1.5 bg-red-50 hover:bg-red-100 rounded-lg text-red-500 transition"
                           >
@@ -2730,6 +2851,55 @@ const App = () => {
                 error: t("camera_error"),
               }}
             />
+          </div>
+        )}
+
+        {trimmerTarget && (
+          <div className="fixed inset-0 z-40 bg-white overflow-y-auto">
+            <div className="max-w-2xl mx-auto p-4 space-y-4">
+              {/* Header */}
+              <div className="flex items-center gap-3 py-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
+                  <Scissors size={16} />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-gray-900">
+                    Edit video
+                  </h2>
+                  <p className="text-xs text-gray-500 truncate max-w-xs">
+                    {trimmerTarget.name}
+                  </p>
+                </div>
+              </div>
+
+              {/* Size warning if applicable */}
+              {trimmerTarget.blob.size > 80 * 1024 * 1024 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
+                  <AlertTriangle
+                    size={16}
+                    className="text-amber-600 shrink-0 mt-0.5"
+                  />
+                  <div>
+                    <p className="text-sm font-bold text-amber-800">
+                      Video is too large to upload
+                    </p>
+                    <p className="text-xs text-amber-700 mt-0.5">
+                      This video is ~
+                      {(trimmerTarget.blob.size / 1024 / 1024).toFixed(0)} MB.
+                      Trim it shorter or split it into smaller clips — each must
+                      be under 100 MB.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <VideoTrimmer
+                blob={trimmerTarget.blob}
+                fileName={trimmerTarget.name}
+                onComplete={handleTrimmerComplete}
+                onCancel={() => setTrimmerTarget(null)}
+              />
+            </div>
           </div>
         )}
 
