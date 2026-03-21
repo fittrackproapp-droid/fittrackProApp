@@ -7,7 +7,7 @@ import {
   Submission,
   Message,
 } from "./types";
-import { db, saveVideo, getVideo } from "./services/db";
+import { db, saveVideo, getVideo, tryCompressBlob } from "./services/db";
 import VideoRecorder from "./components/VideoRecorder";
 import WorkoutCalendar from "./components/WorkoutCalendar";
 import InboxView from "./components/InboxView";
@@ -1217,36 +1217,63 @@ const App = () => {
       setExpandedFeedback((prev) => [...prev, subId]);
     }
   };
-  const handleAddRecordedVideo = (blob: Blob) => {
-    const preview = URL.createObjectURL(blob);
-    setSessionMedia([
-      ...sessionMedia,
-      {
-        id: crypto.randomUUID(),
-        file: blob,
-        type: "video",
-        preview,
-        name: `Recorded Video ${sessionMedia.length + 1}`,
-        isExisting: false,
-      },
-    ]);
+  const handleAddRecordedVideo = async (blob: Blob) => {
     setView("SESSION_HUB");
-  };
-  const handleUploadVideo = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      const preview = URL.createObjectURL(file);
-      setSessionMedia([
-        ...sessionMedia,
+    setLoadingData(true);
+    try {
+      const blobToUse = await tryCompressBlob(blob);
+      const preview = URL.createObjectURL(blobToUse);
+      setSessionMedia((prev) => [
+        ...prev,
         {
           id: crypto.randomUUID(),
-          file: file,
+          file: blobToUse,
+          type: "video",
+          preview,
+          name: `Recorded Video ${prev.length + 1}`,
+          isExisting: false,
+        },
+      ]);
+    } catch (err) {
+      console.error("Failed to process recorded video:", err);
+      alert("Failed to process video. Please try recording again.");
+    } finally {
+      setLoadingData(false);
+    }
+  };
+  const handleUploadVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !e.target.files[0]) return;
+    const file = e.target.files[0];
+
+    // Hard reject anything over 500 MB before even trying
+    if (file.size > 500 * 1024 * 1024) {
+      alert("Video is too large (over 500 MB). Please trim it first.");
+      return;
+    }
+
+    // Show loading while compressing
+    setLoadingData(true);
+    try {
+      const blobToUse = await tryCompressBlob(file);
+      const preview = URL.createObjectURL(blobToUse);
+      setSessionMedia((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          file: blobToUse,
           type: "video",
           preview,
           name: file.name,
           isExisting: false,
         },
       ]);
+    } catch (err) {
+      console.error("Failed to process video:", err);
+      alert("Failed to process video. Please try a different file.");
+    } finally {
+      setLoadingData(false);
+      // Reset input so same file can be re-selected if needed
+      e.target.value = "";
     }
   };
   const handleRemoveMedia = (id: string) => {

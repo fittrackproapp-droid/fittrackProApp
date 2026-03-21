@@ -269,50 +269,107 @@ const MOCK_EXERCISES: Exercise[] = [
 ];
 
 // --- CLOUDINARY STORAGE ---
-const saveToCloudinary = (
-  blob: Blob,
-  onProgress?: (p: number) => void,
-): Promise<string> => {
+
+const MAX_VIDEO_BYTES = 500 * 1024 * 1024; // 00 MB hard cap
+const UPLOAD_TIMEOUT_MS = 120_000;         // 2 minutes per attempt
+const MAX_RETRIES = 3;
+
+export const tryCompressBlob = async (blob: Blob): Promise<Blob> => {
+  if (blob.size < 80 * 1024 * 1024) return blob; // videos up to 80MB are uploaded  with original quality
+  try {
+    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+      ? "video/webm;codecs=vp9"
+      : MediaRecorder.isTypeSupported("video/webm") ? "video/webm" : null;
+    if (!mimeType) return blob;
+
+    const url = URL.createObjectURL(blob);
+    const video = document.createElement("video");
+    video.src = url;
+    video.muted = true;
+    await new Promise<void>((res, rej) => { video.onloadedmetadata = () => res(); video.onerror = rej; });
+
+    const canvas = document.createElement("canvas");
+    const scale = Math.min(1, 1280 / (video.videoWidth || 1280));
+    canvas.width = Math.round((video.videoWidth || 1280) * scale);
+    canvas.height = Math.round((video.videoHeight || 720) * scale);
+    const ctx = canvas.getContext("2d")!;
+    const stream = canvas.captureStream(24);
+    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2_000_000 });
+    const chunks: Blob[] = [];
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+    return await new Promise<Blob>((resolve) => {
+      recorder.onstop = () => {
+        URL.revokeObjectURL(url);
+        const compressed = new Blob(chunks, { type: mimeType });
+        resolve(compressed.size < blob.size ? compressed : blob);
+      };
+      recorder.start();
+      video.play();
+      const drawFrame = () => {
+        if (video.ended || video.paused) { recorder.stop(); return; }
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        requestAnimationFrame(drawFrame);
+      };
+      requestAnimationFrame(drawFrame);
+    });
+  } catch { return blob; }
+};
+
+const uploadToCloudinaryOnce = (blob: Blob, onProgress?: (p: number) => void): Promise<string> => {
   return new Promise((resolve, reject) => {
-    if (STORAGE_CONFIG.CLOUDINARY.cloudName.includes("REPLACE")) {
-      reject(
-        new Error(
-          "Cloudinary Config Missing. Open services/db.ts and update cloudName/uploadPreset.",
-        ),
-      );
-      return;
-    }
-
-    const url = `https://api.cloudinary.com/v1_1/${STORAGE_CONFIG.CLOUDINARY.cloudName}/video/upload`;
-    const formData = new FormData();
-    formData.append("file", blob);
-    formData.append("upload_preset", STORAGE_CONFIG.CLOUDINARY.uploadPreset);
-
+    const { cloudName, uploadPreset } = STORAGE_CONFIG.CLOUDINARY;
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", url);
+    xhr.open("POST", `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`);
+    xhr.timeout = UPLOAD_TIMEOUT_MS;
 
     xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable && onProgress) {
-        const percent = (e.loaded / e.total) * 100;
-        onProgress(percent);
-      }
+      if (e.lengthComputable && onProgress) onProgress((e.loaded / e.total) * 100);
     };
-
     xhr.onload = () => {
       if (xhr.status === 200) {
-        const response = JSON.parse(xhr.responseText);
-        resolve(response.secure_url);
+        try { resolve(JSON.parse(xhr.responseText).secure_url); }
+        catch { reject(new Error("Cloudinary returned an unexpected response.")); }
       } else {
-        reject(
-          new Error(`Cloudinary Error: ${xhr.statusText} (${xhr.status})`),
-        );
+        let detail = "";
+        try { detail = JSON.parse(xhr.responseText)?.error?.message || ""; } catch { /**/ }
+        reject(new Error(`Cloudinary upload failed (${xhr.status}): ${detail || xhr.statusText}`));
       }
     };
+    xhr.ontimeout = () => reject(new Error(`Upload timed out after ${UPLOAD_TIMEOUT_MS / 1000}s. Try a shorter video or check your connection.`));
+    xhr.onerror  = () => reject(new Error("Network error during upload. Check your internet connection and try again."));
 
-    xhr.onerror = () =>
-      reject(new Error("Network Error uploading to Cloudinary"));
+    const formData = new FormData();
+    formData.append("file", blob);
+    formData.append("upload_preset", uploadPreset);
     xhr.send(formData);
   });
+};
+
+const saveToCloudinary = async (blob: Blob, onProgress?: (p: number) => void): Promise<string> => {
+  if (!STORAGE_CONFIG.CLOUDINARY.cloudName || STORAGE_CONFIG.CLOUDINARY.cloudName.includes("REPLACE")) {
+    throw new Error("Cloudinary is not configured. Check your environment variables.");
+  }
+  if (blob.size > MAX_VIDEO_BYTES) {
+    throw new Error(`Video is too large (${(blob.size / 1024 / 1024).toFixed(0)} MB). Maximum is ${MAX_VIDEO_BYTES / 1024 / 1024} MB. Record a shorter clip.`);
+  }
+
+  const blobToUpload = await tryCompressBlob(blob);
+  let lastError: Error = new Error("Upload failed");
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      if (attempt > 1) onProgress?.(0);
+      return await uploadToCloudinaryOnce(blobToUpload, onProgress);
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`Cloudinary attempt ${attempt}/${MAX_RETRIES} failed:`, err.message);
+      const isFatal = /40[013]|too large/.test(err.message);
+      if (isFatal || attempt === MAX_RETRIES) break;
+      await new Promise((r) => setTimeout(r, 2000 * attempt)); // 2s, 4s back-off
+    }
+  }
+  throw lastError;
 };
 
 // --- MAIN STORAGE FUNCTIONS ---
